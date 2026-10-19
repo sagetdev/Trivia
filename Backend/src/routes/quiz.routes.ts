@@ -97,7 +97,7 @@ function publicQuestion(question: QuizQuestion) {
     type: question.type,
     question: question.question,
     answers: question.answers,
-    source: providerName,
+    source: question.source ?? providerName,
   };
 }
 
