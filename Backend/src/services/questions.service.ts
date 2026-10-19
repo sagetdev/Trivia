@@ -1,12 +1,134 @@
 import * as opentdb from "./opentdb.service";
 import * as triviaapi from "./triviaapi.service";
+import type { Difficulty, QuestionType, QuizQuestion } from "./opentdb.service";
 
-const useTriviaApi = process.env.QUESTION_PROVIDER === "triviaapi";
-const provider = useTriviaApi ? triviaapi : opentdb;
+/**
+ * OpenTDB remains the canonical category catalogue. Only categories with a
+ * reasonably equivalent Trivia API category can use the 60/40 hybrid mix.
+ * Set QUESTION_PROVIDER=opentdb to disable the hybrid mode.
+ */
+const openTdbOnly = process.env.QUESTION_PROVIDER === "opentdb";
+export const providerName = openTdbOnly
+  ? "Open Trivia DB"
+  : "The Trivia API + Open Trivia DB";
 
-export const providerName = useTriviaApi ? "The Trivia API" : "Open Trivia DB";
+const TRIVIA_CATEGORY_BY_OPEN_TDB_ID: Record<number, number> = {
+  9: 101,  // General Knowledge
+  10: 107, // Books -> Arts & Literature
+  11: 105, // Film
+  12: 106, // Music
+  14: 105, // Television
+  17: 102, // Science & Nature
+  21: 108, // Sports
+  22: 104, // Geography
+  23: 103, // History
+  25: 107, // Art
+};
 
-export const getCategories: () => Promise<{ id: number; name: string }[]> = provider.getCategories;
-export const getQuestions = provider.getQuestions;
+export const getCategories: () => Promise<{ id: number; name: string }[]> =
+  opentdb.getCategories;
+
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function randomInteger(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+async function getOpenTdbQuestions(
+  amount: number,
+  options: { categoryId?: number; difficulty?: Difficulty; type?: QuestionType },
+  includeTrueFalse: boolean,
+): Promise<QuizQuestion[]> {
+  if (amount <= 0) return [];
+
+  // Keep at least one multiple-choice OpenTDB question whenever possible.
+  if (!includeTrueFalse || amount === 1) {
+    return opentdb.getQuestions({ ...options, amount });
+  }
+
+  const trueFalseCount = randomInteger(1, Math.min(3, amount - 1));
+  const multipleCount = amount - trueFalseCount;
+  const [trueFalse, multiple] = await Promise.all([
+    opentdb.getQuestions({ ...options, amount: trueFalseCount, type: "boolean" }),
+    multipleCount > 0
+      ? opentdb.getQuestions({ ...options, amount: multipleCount, type: "multiple" })
+      : Promise.resolve([]),
+  ]);
+  return [...trueFalse, ...multiple];
+}
+
+export async function getQuestions(options: {
+  amount: number;
+  categoryId?: number;
+  difficulty?: Difficulty;
+  type?: QuestionType;
+}): Promise<QuizQuestion[]> {
+  if (openTdbOnly || options.type === "boolean" || options.amount < 2) {
+    return getOpenTdbQuestions(options.amount, options, options.type === undefined);
+  }
+
+  const triviaCategoryId = options.categoryId === undefined
+    ? undefined
+    : TRIVIA_CATEGORY_BY_OPEN_TDB_ID[options.categoryId];
+
+  // If the selected OpenTDB category has no close equivalent in The Trivia
+  // API, use OpenTDB alone rather than silently mixing unrelated subjects.
+  if (options.categoryId !== undefined && triviaCategoryId === undefined) {
+    return getOpenTdbQuestions(options.amount, options, options.type === undefined);
+  }
+
+  const triviaCount = Math.min(options.amount - 1, Math.max(1, Math.round(options.amount * 0.6)));
+  const openTdbCount = options.amount - triviaCount;
+  const categoryName = options.categoryId === undefined
+    ? undefined
+    : (await opentdb.getCategories()).find((category) => category.id === options.categoryId)?.name;
+
+  const [triviaResult, openTdbResult] = await Promise.allSettled([
+    triviaapi.getQuestions({
+      amount: triviaCount,
+      categoryId: triviaCategoryId,
+      difficulty: options.difficulty,
+      type: "multiple",
+    }),
+    getOpenTdbQuestions(openTdbCount, options, options.type === undefined),
+  ]);
+
+  if (triviaResult.status === "rejected" && openTdbResult.status === "rejected") {
+    throw new Error("Les deux API de questions sont temporairement indisponibles. Réessaie.");
+  }
+
+  if (triviaResult.status === "rejected") {
+    // API de secours : remplir le quiz avec OpenTDB si The Trivia API échoue.
+    return shuffle(await getOpenTdbQuestions(options.amount, options, options.type === undefined));
+  }
+
+  if (openTdbResult.status === "rejected") {
+    // The Trivia API ne fournit pas de vrai/faux, mais peut compléter le quiz.
+    const fallback = await triviaapi.getQuestions({
+      amount: options.amount,
+      categoryId: triviaCategoryId,
+      difficulty: options.difficulty,
+      type: "multiple",
+    });
+    return shuffle(fallback.map((question) => ({
+      ...question,
+      ...(categoryName ? { category: categoryName } : {}),
+    })));
+  }
+
+  const normalizedTrivia = triviaResult.value.map((question) => ({
+    ...question,
+    ...(categoryName ? { category: categoryName } : {}),
+    source: "The Trivia API",
+  }));
+  return shuffle([...normalizedTrivia, ...openTdbResult.value]);
+}
 
 export type { QuizQuestion, Difficulty, QuestionType } from "./opentdb.service";
