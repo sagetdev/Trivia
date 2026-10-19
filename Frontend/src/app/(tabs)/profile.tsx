@@ -57,10 +57,10 @@ export default function ProfileScreen() {
               {formatNumber(player.xp)} / {formatNumber(player.nextLevelXp)} XP
             </Text>
             <Text size={13} weight="semibold" color={colors.primary}>
-              Level {user.level + 1}
+              Level {player.level + 1}
             </Text>
           </View>
-          <ProgressBar progress={user.xp / user.nextLevelXp} />
+          <ProgressBar progress={player.xp / user.nextLevelXp} />
         </View>
       </View>
 
