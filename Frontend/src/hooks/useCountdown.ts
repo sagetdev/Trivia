@@ -9,16 +9,23 @@ export function useCountdown(seconds: number | null, running: boolean, resetKey:
 
   useEffect(() => {
     if (seconds === null || !running) return;
+
+    let remaining = seconds;
+    let ended = false;
+
     const id = setInterval(() => {
-      setLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(id);
-          onEnd();
-          return 0;
-        }
-        return prev - 1;
-      });
+      remaining = Math.max(0, remaining - 1);
+      setLeft(remaining);
+
+      if (remaining === 0 && !ended) {
+        ended = true;
+        clearInterval(id);
+        // Side effects must stay outside React state updater callbacks:
+        // React Strict Mode can invoke updater callbacks more than once.
+        onEnd();
+      }
     }, 1000);
+
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seconds, running, resetKey]);

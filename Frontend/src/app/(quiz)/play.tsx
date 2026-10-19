@@ -89,7 +89,35 @@ export default function QuizPlayScreen() {
         setFeedback({ isCorrect: res.isCorrect, correctAnswer: res.correctAnswer });
         setRevealed(true);
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Erreur inconnue');
+        const message = e instanceof Error ? e.message : 'Erreur inconnue';
+
+        // A timeout and a tap can race, or a previous request can finish on the
+        // server before this screen receives its response. Recover from that
+        // specific conflict by synchronizing with the authoritative session.
+        if (message.includes('Cette réponse concerne une ancienne question')) {
+          try {
+            const session = await api.getQuiz(quizId);
+
+            if (session.finished || !session.question) {
+              setError('Cette partie est déjà terminée. Retourne à l’accueil pour continuer.');
+            } else {
+              setQuestion(session.question);
+              setIndex(session.currentIndex);
+              setTotal(session.totalQuestions);
+              setSelected(null);
+              setRevealed(false);
+              setFeedback(null);
+              setTimedOut(false);
+              nextQuestion.current = null;
+              finalResult.current = null;
+              setError(null);
+            }
+          } catch {
+            setError('La partie a été désynchronisée. Vérifie ta connexion puis retourne à l’accueil.');
+          }
+        } else {
+          setError(message);
+        }
       } finally {
         submitLock.current = false;
         setSubmitting(false);
