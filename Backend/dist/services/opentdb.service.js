@@ -1,17 +1,14 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getCategories = getCategories;
 exports.getQuestions = getQuestions;
-const he_1 = __importDefault(require("he"));
+const he_1 = require("he");
 const BASE_URL = "https://opentdb.com";
 let categoriesCache;
 let lastQuestionRequest = 0;
 let questionQueue = Promise.resolve();
 function decode(value) {
-    return he_1.default.decode(value);
+    return (0, he_1.decode)(value);
 }
 function shuffle(items) {
     const result = [...items];
@@ -36,7 +33,7 @@ async function getCategories() {
         return categoriesCache.data;
     }
     const data = await request(`${BASE_URL}/api_category.php`);
-    if (data.response_code !== 0 || !data.trivia_categories) {
+    if (!data.trivia_categories?.length) {
         throw new Error("Impossible de récupérer les catégories OpenTDB.");
     }
     categoriesCache = {
@@ -60,7 +57,6 @@ async function getQuestions(options) {
     await waitForQuestionSlot();
     const params = new URLSearchParams({
         amount: String(options.amount),
-        encode: "default",
     });
     if (options.categoryId !== undefined) {
         params.set("category", String(options.categoryId));
@@ -94,6 +90,7 @@ async function getQuestions(options) {
             question: decode(item.question),
             correctAnswer,
             answers,
+            source: "Open Trivia DB",
         };
     });
 }

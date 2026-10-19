@@ -131,7 +131,10 @@ function pruneSessions(): void {
 }
 
 router.get("/config", (_req, res) => {
-  res.json({ provider: providerName, supportedTypes: providerName === "The Trivia API" ? ["multiple"] : ["multiple", "boolean"] });
+  res.json({
+    provider: providerName,
+    supportedTypes: ["multiple", "boolean"],
+  });
 });
 
 router.get("/categories", async (_req, res) => {
