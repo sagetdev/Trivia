@@ -42,13 +42,34 @@ async function fetchAndStore(provider: string): Promise<Category[]> {
   return list;
 }
 
+async function loadOfflineCache(): Promise<Category[] | null> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const candidates = keys.filter((key) => key.startsWith(`categories:v4:${process.env.EXPO_PUBLIC_API_URL ?? "local"}:`) || key === `categories:v3:${process.env.EXPO_PUBLIC_API_URL ?? "local"}`);
+    let newest: { savedAt: number; data: Category[] } | null = null;
+    for (const key of candidates) {
+      const raw = await AsyncStorage.getItem(key);
+      if (!raw) continue;
+      const value = JSON.parse(raw) as { savedAt: number; data: Category[] };
+      if (Array.isArray(value.data) && value.data.length && (!newest || value.savedAt > newest.savedAt)) newest = value;
+    }
+    return newest?.data ?? null;
+  } catch { return null; }
+}
+
 export function loadCategories(): Promise<Category[]> {
   if (cache) return Promise.resolve(cache);
   inflight ??= (async () => {
-    const config = await api.getConfig();
-    const saved = await readCache(config.provider);
-    if (saved) { cache = saved; return saved; }
-    return fetchAndStore(config.provider);
+    try {
+      const config = await api.getConfig();
+      const saved = await readCache(config.provider);
+      if (saved) { cache = saved; return saved; }
+      return await fetchAndStore(config.provider);
+    } catch (error) {
+      const offline = await loadOfflineCache();
+      if (offline) { cache = offline; return offline; }
+      throw error;
+    }
   })().finally(() => { inflight = null; });
   return inflight;
 }
