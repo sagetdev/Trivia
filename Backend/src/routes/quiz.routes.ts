@@ -107,6 +107,13 @@ function currentQuestion(session: QuizSession) {
   return question ? publicQuestion(question) : null;
 }
 
+function calculateXp(session: QuizSession): number {
+  return session.answers.reduce((sum, answer) => {
+    if (!answer.isCorrect) return sum;
+    return sum + (answer.difficulty === "easy" ? 8 : answer.difficulty === "hard" ? 16 : 12);
+  }, 0);
+}
+
 function pruneSessions(): void {
   if (sessions.size <= 500) return;
   const oldestFirst = [...sessions.values()].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
@@ -291,7 +298,7 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       durationSeconds: Math.max(0, Math.round((now - Date.parse(session.startedAt)) / 1000)),
       finishedAt: session.finishedAt,
       category: session.questions[0]?.category ?? "Mixed",
-      xp: session.score * (session.questions[0]?.difficulty === "easy" ? 8 : session.questions[0]?.difficulty === "hard" ? 16 : 12),
+      xp: calculateXp(session),
       ...(session.challengeDate ? { challengeDate: session.challengeDate } : {}),
     });
     leaderboard.sort((a, b) => b.accuracy - a.accuracy || b.score - a.score || a.durationSeconds - b.durationSeconds);
@@ -317,7 +324,7 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       playerName: session.playerName,
       score: session.score,
       total: session.answers.length,
-      xp: session.score * (session.questions[0]?.difficulty === "easy" ? 8 : session.questions[0]?.difficulty === "hard" ? 16 : 12),
+      xp: calculateXp(session),
       finishedAt: session.finishedAt,
     } } : {}),
   });
