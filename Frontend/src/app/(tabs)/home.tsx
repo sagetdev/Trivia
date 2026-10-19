@@ -67,6 +67,7 @@ export default function HomeScreen() {
       </View>
 
       <DailyChallengeCard onPlay={() => router.push({ pathname: '/(quiz)/play', params: { category: 'any', difficulty: dailyChallenge.difficulty, count: String(dailyChallenge.amount), time: String(dailyChallenge.timePerQuestion ?? 'none'), challenge: 'daily', challengeDate: dailyChallenge.date } })} />
+      <Button label="Play with friends" variant="secondary" onPress={() => router.push('/(quiz)/multiplayer')} />
 
       <SectionHeader title="Categories" actionLabel="See all" onActionPress={() => router.push('/explore')} />
 
