@@ -2,6 +2,7 @@ const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:4000/a
 
 export type Difficulty = "easy" | "medium" | "hard";
 export type QuestionType = "multiple" | "boolean";
+export type GameMode = "classic" | "fast" | "survival" | "progressive";
 export interface QuizCategory { id: number; name: string }
 export interface QuizQuestion {
   category: string;
@@ -42,7 +43,7 @@ export interface RoomSnapshot {
 }
 export interface CreateQuizOptions {
   amount?: number; categoryId?: number; difficulty?: Difficulty; type?: QuestionType;
-  playerName?: string; timePerQuestion?: number | null;
+  playerName?: string; timePerQuestion?: number | null; gameMode?: GameMode;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
