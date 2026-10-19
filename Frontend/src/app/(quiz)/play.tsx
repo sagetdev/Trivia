@@ -68,7 +68,7 @@ export default function QuizPlayScreen() {
     } finally {
       setLoading(false);
     }
-  }, [amount, categoryId, difficulty, timeLimit]);
+  }, [amount, categoryId, difficulty, timeLimit, gameMode, params.challenge, params.challengeDate]);
 
   useEffect(() => {
     if (booted.current) return;
