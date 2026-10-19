@@ -405,7 +405,7 @@ router.get("/stats", (req, res) => {
     categoryStats.set(key, current);
   }
   res.json({
-    playerName: name, quizzes: records.length, correctAnswers, totalQuestions,
+    playerName: name, quizzes: records.length, xp: records.reduce((sum, entry) => sum + (entry.xp ?? 0), 0), correctAnswers, totalQuestions,
     accuracy: totalQuestions ? Math.round(correctAnswers / totalQuestions * 100) : 0,
     averageDurationSeconds: records.length ? Math.round(records.reduce((sum, entry) => sum + entry.durationSeconds, 0) / records.length) : 0,
     categories: [...categoryStats.entries()].map(([category, value]) => ({ category, ...value, accuracy: value.total ? Math.round(value.correct / value.total * 100) : 0 })).sort((a, b) => b.accuracy - a.accuracy),
