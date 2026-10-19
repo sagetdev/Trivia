@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, TextInput, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { api, type LeaderboardScope } from '../../lib/api';
 import type { Player } from '../../components/data/mock';
@@ -19,6 +19,8 @@ export default function RankingScreen() {
   const player = usePlayer();
   const [players, setPlayers] = useState<Player[]>([]);
   const [scope, setScope] = useState<LeaderboardScope>('global');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [friendsFilter, setFriendsFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,7 +28,7 @@ export default function RankingScreen() {
     setLoading(true);
     setError(null);
     api
-      .getLeaderboard(scope)
+      .getLeaderboard(scope, scope === 'category' ? categoryFilter : undefined, scope === 'friends' ? friendsFilter.split(',').map((name) => name.trim()).filter(Boolean) : undefined)
       .then((list) =>
         setPlayers(
           list.map((e, i) => ({
@@ -42,7 +44,7 @@ export default function RankingScreen() {
       )
       .catch((e) => setError(e instanceof Error ? e.message : 'Erreur inconnue'))
       .finally(() => setLoading(false));
-  }, [player.name, scope]);
+  }, [player.name, scope, categoryFilter, friendsFilter]);
 
   useFocusEffect(load);
 
@@ -55,10 +57,14 @@ export default function RankingScreen() {
       <Text size={28} weight="bold">
         Leaderboard
       </Text>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <Button label="Global" variant={scope === 'global' ? 'primary' : 'secondary'} onPress={() => setScope('global')} />
         <Button label="Last 7 days" variant={scope === 'week' ? 'primary' : 'secondary'} onPress={() => setScope('week')} />
+        <Button label="Category" variant={scope === 'category' ? 'primary' : 'secondary'} onPress={() => setScope('category')} />
+        <Button label="Players" variant={scope === 'friends' ? 'primary' : 'secondary'} onPress={() => setScope('friends')} />
       </View>
+      {scope === 'category' && <TextInput value={categoryFilter} onChangeText={setCategoryFilter} placeholder="Category name (e.g. Science)" placeholderTextColor={colors.textFaint} style={{ backgroundColor: colors.surface, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 }} />}
+      {scope === 'friends' && <TextInput value={friendsFilter} onChangeText={setFriendsFilter} placeholder="Player names separated by commas" placeholderTextColor={colors.textFaint} style={{ backgroundColor: colors.surface, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12 }} />}
 
       {loading && <ActivityIndicator color={colors.primary} />}
 
