@@ -1,8 +1,10 @@
-import React from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useState } from 'react';
+import { Pressable, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme';
-import { achievements, user } from '../../components/data/mock';
+import { achievements } from '../../components/data/mock';
+import { usePlayer } from '../../hooks/usePlayer';
+import { setPlayerName } from '../../lib/player';
 import { formatNumber } from '../../components/data/format';
 import { Screen } from '../../components/Screen';
 import {
@@ -12,19 +14,24 @@ import {
   IconButton,
   IconTile,
   ProgressBar,
+  Button,
   SectionHeader,
   Text,
 } from '../../components/ui';
 import { AchievementBadge } from '../../components/features';
 
-const stats = [
-  { value: String(user.quizzes), label: 'Quizzes' },
-  { value: `${user.accuracy}%`, label: 'Accuracy' },
-  { value: `${user.bestStreak} days`, label: 'Best streak' },
-];
-
 export default function ProfileScreen() {
   const router = useRouter();
+  const player = usePlayer();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const saveName = async () => { await setPlayerName(draft); await player.refresh(); setEditing(false); };
+
+  const stats = [
+    { value: String(player.quizzes), label: 'Quizzes' },
+    { value: `${player.accuracy}%`, label: 'Accuracy' },
+    { value: `${player.bestStreak} days`, label: 'Best streak' },
+  ];
 
   return (
     <Screen scroll>
@@ -36,18 +43,18 @@ export default function ProfileScreen() {
       </View>
 
       <View style={{ alignItems: 'center', gap: 8 }}>
-        <Avatar initials={user.initials} size={88} bg={colors.primary} fg={colors.onPrimary} fontSize={30} />
+        <Avatar initials={player.initials} size={88} bg={colors.primary} fg={colors.onPrimary} fontSize={30} />
         <Text size={22} weight="bold">
-          {user.name}
+          {player.name}
         </Text>
         <Text size={14} color={colors.textMuted}>
-          {user.handle} · Level {user.level}
+          {player.handle} · Level {player.level}
         </Text>
 
         <View style={{ width: '100%', gap: 6 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text size={13} weight="medium" color={colors.textMuted}>
-              {formatNumber(user.xp)} / {formatNumber(user.nextLevelXp)} XP
+              {formatNumber(player.xp)} / {formatNumber(player.nextLevelXp)} XP
             </Text>
             <Text size={13} weight="semibold" color={colors.primary}>
               Level {user.level + 1}
@@ -78,7 +85,7 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      <Pressable accessibilityRole="button">
+      <Pressable accessibilityRole="button" onPress={() => { setDraft(player.name); setEditing((value) => !value); }}>
         <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
           <IconTile icon="pencil" bg={colors.primarySoft} color={colors.primary} size={36} iconSize={18} radius={11} />
           <Text size={16} weight="medium" style={{ flex: 1 }}>
@@ -87,6 +94,13 @@ export default function ProfileScreen() {
           <Icon name="chevron-right" size={20} color={colors.textFaint} />
         </Card>
       </Pressable>
+      {editing && (
+        <View style={{ gap: 10 }}>
+          <Text size={14} color={colors.textMuted}>Ton pseudo (24 caractères maximum)</Text>
+          <TextInput value={draft} onChangeText={setDraft} maxLength={24} autoCapitalize="words" placeholder="Ton pseudo" placeholderTextColor={colors.textFaint} style={{ backgroundColor: colors.surface, color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: 14 }} />
+          <Button label="Enregistrer" onPress={() => { saveName().catch(() => {}); }} disabled={!draft.trim()} />
+        </View>
+      )}
     </Screen>
   );
 }
