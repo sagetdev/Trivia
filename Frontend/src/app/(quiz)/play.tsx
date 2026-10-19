@@ -7,6 +7,7 @@ import { api, type QuizQuestion, type QuizSummary } from '../../lib/api';
 import { findCategory, shortName } from '../../hooks/useCategories';
 import { getPlayerName, recordCompletedQuiz } from '../../lib/player';
 import { formatTime } from '../../components/data/format';
+import type { GameMode } from '../../lib/api';
 import { useCountdown } from '../../hooks/useCountdown';
 import { Button, CategoryTag, OptionCard, OptionState, ProgressBar, Text } from '../../components/ui';
 import { FeedbackSheet, QuizTopBar, Verdict } from '../../components/features';
@@ -18,7 +19,8 @@ const SHOW_SOURCE = __DEV__; // temporaire : visible seulement en développement
 export default function QuizPlayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string; challenge?: string }>();
+  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string; challenge?: string; gameMode?: string }>();
+  const gameMode = (['classic', 'fast', 'survival', 'progressive'].includes(params.gameMode ?? '') ? params.gameMode : 'classic') as GameMode;
 
   const categoryId = params.category && params.category !== 'any' ? Number(params.category) : undefined;
   const category = findCategory(params.category);
@@ -27,7 +29,7 @@ export default function QuizPlayScreen() {
     | 'medium'
     | 'hard';
   const amount = Number(params.count) || 10;
-  const timeLimit = params.time === 'none' ? null : Number(params.time) || 30;
+  const timeLimit = gameMode === 'fast' || params.time === 'none' ? null : Number(params.time) || 30;
 
   const [quizId, setQuizId] = useState<string | null>(null);
   const [total, setTotal] = useState(amount);
@@ -40,6 +42,8 @@ export default function QuizPlayScreen() {
   const [timedOut, setTimedOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fastSecondsLeft, setFastSecondsLeft] = useState(60);
+  const fastDeadline = useRef<number | null>(null);
 
   const nextQuestion = useRef<QuizQuestion | null>(null);
   const finalResult = useRef<QuizSummary | null>(null);
@@ -52,7 +56,9 @@ export default function QuizPlayScreen() {
     setError(null);
     try {
       const playerName = await getPlayerName();
-      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName, timePerQuestion: timeLimit });
+      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName, timePerQuestion: timeLimit, gameMode });
+      fastDeadline.current = gameMode === 'fast' ? Date.now() + 60_000 : null;
+      setFastSecondsLeft(60);
       setQuizId(session.quizId);
       setTotal(session.totalQuestions);
       setQuestion(session.question);
@@ -95,6 +101,18 @@ export default function QuizPlayScreen() {
   const secondsLeft = useCountdown(timeLimit, !!question && !revealed && !submitting && !error, index, () =>
     send('', true),
   );
+
+  useEffect(() => {
+    if (gameMode !== 'fast' || !quizId || !question || revealed || submitting || error || fastDeadline.current === null) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((fastDeadline.current! - Date.now()) / 1000));
+      setFastSecondsLeft(remaining);
+      if (remaining <= 0) send('', true);
+    };
+    tick();
+    const timer = setInterval(tick, 250);
+    return () => clearInterval(timer);
+  }, [gameMode, quizId, question, revealed, submitting, error, send]);
 
   const submit = () => {
     if (selected === null || !question) return;
@@ -178,9 +196,9 @@ export default function QuizPlayScreen() {
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, gap: 20 }}
       >
         <QuizTopBar
-          title={params.challenge === 'daily' ? `Daily challenge · ${index + 1}/${total}` : `Question ${index + 1} of ${total}`}
+          title={params.challenge === 'daily' ? `Daily challenge · ${index + 1}/${total}` : gameMode === 'survival' ? `Survival · ${index + 1}/${total}` : gameMode === 'progressive' ? `Progressive · ${index + 1}/${total}` : gameMode === 'fast' ? `60s Rush · ${index + 1}/${total}` : `Question ${index + 1} of ${total}`}
           onClose={() => router.replace('/home')}
-          timer={timeLimit === null ? null : formatTime(secondsLeft)}
+          timer={gameMode === 'fast' ? formatTime(fastSecondsLeft) : timeLimit === null ? null : formatTime(secondsLeft)}
         />
 
         <ProgressBar progress={(index + 1) / total} />
