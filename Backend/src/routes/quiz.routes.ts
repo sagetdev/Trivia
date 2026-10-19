@@ -27,6 +27,7 @@ interface AnswerReview {
 interface QuizSession {
   id: string;
   playerName: string;
+  categoryName: string;
   questions: QuizQuestion[];
   currentIndex: number;
   score: number;
@@ -218,6 +219,7 @@ router.post("/quizzes", async (req, res) => {
     const session: QuizSession = {
       id,
       playerName: playerName.trim(),
+      categoryName: categoryId === undefined ? "Mixed" : questions[0]?.category ?? "Mixed",
       questions,
       currentIndex: 0,
       score: 0,
@@ -310,7 +312,7 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       accuracy: session.answers.length ? session.score / session.answers.length : 0,
       durationSeconds: Math.max(0, Math.round((now - Date.parse(session.startedAt)) / 1000)),
       finishedAt: session.finishedAt,
-      category: session.questions[0]?.category ?? "Mixed",
+      category: session.categoryName ?? "Mixed",
       xp: calculateXp(session),
       ...(session.challengeDate ? { challengeDate: session.challengeDate } : {}),
     });
