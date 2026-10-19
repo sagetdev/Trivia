@@ -12,6 +12,7 @@ export interface QuizQuestion {
   question: string;
   correctAnswer: string;
   answers: string[];
+  source?: string;
 }
 
 interface OpenTDBCategory {
@@ -161,6 +162,7 @@ export async function getQuestions(options: {
       question: decode(item.question),
       correctAnswer,
       answers,
+      source: "Open Trivia DB",
     };
   });
 }
