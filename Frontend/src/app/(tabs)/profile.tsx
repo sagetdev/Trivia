@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme';
 import type { Achievement } from '../../components/data/mock';
 import { usePlayer } from '../../hooks/usePlayer';
 import { setPlayerName } from '../../lib/player';
+import { api, type PlayerAnalytics } from '../../lib/api';
 import { formatNumber } from '../../components/data/format';
 import { Screen } from '../../components/Screen';
 import {
@@ -25,6 +26,8 @@ export default function ProfileScreen() {
   const player = usePlayer();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [analytics, setAnalytics] = useState<PlayerAnalytics | null>(null);
+  useEffect(() => { api.getStats(player.name).then(setAnalytics).catch(() => setAnalytics(null)); }, [player.name]);
   const saveName = async () => { await setPlayerName(draft); await player.refresh(); setEditing(false); };
 
   const achievements: Achievement[] = [
@@ -83,6 +86,26 @@ export default function ProfileScreen() {
           </Card>
         ))}
       </View>
+
+      {analytics && analytics.quizzes > 0 && (
+        <Card radius={16} style={{ padding: 16, gap: 10 }}>
+          <Text size={16} weight="semibold">Server statistics</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text size={13} color={colors.textMuted}>Average quiz duration</Text>
+            <Text size={13} weight="semibold">{Math.floor(analytics.averageDurationSeconds / 60)}m {analytics.averageDurationSeconds % 60}s</Text>
+          </View>
+          <Text size={13} color={colors.textMuted}>Mastered categories (sorted by accuracy)</Text>
+          {analytics.categories.slice(0, 5).map((item) => (
+            <View key={item.category} style={{ gap: 5 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text size={13}>{item.category}</Text>
+                <Text size={13} weight="semibold">{item.accuracy}% · {item.quizzes} quiz{item.quizzes > 1 ? 'zes' : ''}</Text>
+              </View>
+              <ProgressBar progress={item.accuracy / 100} />
+            </View>
+          ))}
+        </Card>
+      )}
 
       <SectionHeader title="Achievements" />
 
