@@ -87,8 +87,28 @@ async function getOpenTdbQuestions(
       }
     }
 
+    // If the requested true/false quota is unavailable, let OpenTDB choose
+    // the available question types rather than failing the whole quiz.
+    if (includeTrueFalse) {
+      try {
+        return await opentdb.getQuestions({
+          ...options,
+          amount,
+          difficulty: undefined,
+        });
+      } catch {
+        // Continue to the mixed-category fallback below.
+      }
+    }
+
     if (options.categoryId !== undefined) {
       try {
+        if (includeTrueFalse) {
+          return await opentdb.getQuestions({
+            amount,
+            type: options.type,
+          });
+        }
         return await getOpenTdbQuestionsStrict(
           amount,
           { ...options, categoryId: undefined, difficulty: undefined },
