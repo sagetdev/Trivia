@@ -56,7 +56,7 @@ async function persist(): Promise<void> {
     sessions: [...sessions.entries()],
     leaderboard: [...leaderboard],
   };
-  persistQueue = persistQueue.then(() => writePersistentState(snapshot));
+  persistQueue = persistQueue.catch(() => {}).then(() => writePersistentState(snapshot));
   await persistQueue;
 }
 
@@ -101,11 +101,9 @@ function currentQuestion(session: QuizSession) {
 
 function pruneSessions(): void {
   if (sessions.size <= 500) return;
-  const completed = [...sessions.values()]
-    .filter((session) => session.finishedAt)
-    .sort((a, b) => Date.parse(a.finishedAt!) - Date.parse(b.finishedAt!));
-  while (sessions.size > 500 && completed.length) {
-    sessions.delete(completed.shift()!.id);
+  const oldestFirst = [...sessions.values()].sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
+  while (sessions.size > 500 && oldestFirst.length) {
+    sessions.delete(oldestFirst.shift()!.id);
   }
 }
 
