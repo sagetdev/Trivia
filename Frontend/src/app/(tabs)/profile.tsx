@@ -67,7 +67,7 @@ export default function ProfileScreen() {
               Level {player.level + 1}
             </Text>
           </View>
-          <ProgressBar progress={player.xp / user.nextLevelXp} />
+          <ProgressBar progress={player.xp / player.nextLevelXp} />
         </View>
       </View>
 
