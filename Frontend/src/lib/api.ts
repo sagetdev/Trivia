@@ -15,7 +15,7 @@ export interface QuizQuestion {
 export interface QuizSession { quizId: string; totalQuestions: number; question: QuizQuestion | null }
 export interface QuizSummary {
   quizId: string; playerName: string; score: number; total: number; finishedAt: string;
-  durationSeconds?: number;
+  durationSeconds?: number; xp?: number;
 }
 export interface AnswerResult {
   isCorrect: boolean; timedOut?: boolean; correctAnswer: string; answeredIndex: number;
@@ -43,7 +43,7 @@ export interface RoomSnapshot {
 }
 export interface CreateQuizOptions {
   amount?: number; categoryId?: number; difficulty?: Difficulty; type?: QuestionType;
-  playerName?: string; timePerQuestion?: number | null; gameMode?: GameMode;
+  playerName?: string; timePerQuestion?: number | null; gameMode?: GameMode; challengeDate?: string;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
