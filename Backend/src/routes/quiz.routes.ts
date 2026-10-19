@@ -267,7 +267,6 @@ router.post("/quizzes/:id/answers", async (req, res) => {
   const now = Date.now();
   if (finished) {
     session.finishedAt = new Date(now).toISOString();
-    const total = session.questions.length;
     leaderboard.push({
       quizId: session.id,
       playerName: session.playerName,
@@ -300,7 +299,7 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       quizId: session.id,
       playerName: session.playerName,
       score: session.score,
-      total: session.questions.length,
+      total: session.answers.length,
       finishedAt: session.finishedAt,
     } } : {}),
   });
@@ -316,7 +315,7 @@ router.get("/quizzes/:id/results", (req, res) => {
     quizId: session.id,
     playerName: session.playerName,
     score: session.score,
-    total: session.questions.length,
+    total: session.answers.length,
     finishedAt: session.finishedAt,
     durationSeconds: Math.max(0, Math.round((Date.parse(session.finishedAt) - Date.parse(session.startedAt)) / 1000)),
   });
@@ -328,7 +327,7 @@ router.get("/quizzes/:id/review", (req, res) => {
   if (!session.finishedAt) {
     res.status(409).json({ error: "La correction sera disponible à la fin de la partie." }); return;
   }
-  res.json({ quizId: session.id, score: session.score, total: session.questions.length, answers: session.answers });
+  res.json({ quizId: session.id, score: session.score, total: session.answers.length, answers: session.answers });
 });
 
 router.get("/leaderboard", (req, res) => {
