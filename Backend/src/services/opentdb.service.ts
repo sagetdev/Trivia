@@ -1,4 +1,4 @@
-import he from "he";
+import { decode as htmlDecode } from "he";
 
 const BASE_URL = "https://opentdb.com";
 
@@ -42,7 +42,7 @@ let lastQuestionRequest = 0;
 let questionQueue: Promise<void> = Promise.resolve();
 
 function decode(value: string): string {
-  return he.decode(value);
+  return htmlDecode(value);
 }
 
 function shuffle<T>(items: T[]): T[] {
