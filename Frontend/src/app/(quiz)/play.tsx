@@ -19,7 +19,7 @@ const SHOW_SOURCE = __DEV__; // temporaire : visible seulement en développement
 export default function QuizPlayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string; challenge?: string; gameMode?: string }>();
+  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string; challenge?: string; challengeDate?: string; gameMode?: string }>();
   const gameMode = (['classic', 'fast', 'survival', 'progressive'].includes(params.gameMode ?? '') ? params.gameMode : 'classic') as GameMode;
 
   const categoryId = params.category && params.category !== 'any' ? Number(params.category) : undefined;
@@ -56,7 +56,7 @@ export default function QuizPlayScreen() {
     setError(null);
     try {
       const playerName = await getPlayerName();
-      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName, timePerQuestion: timeLimit, gameMode });
+      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName, timePerQuestion: timeLimit, gameMode, ...(params.challenge === 'daily' && params.challengeDate ? { challengeDate: params.challengeDate } : {}) });
       fastDeadline.current = gameMode === 'fast' ? Date.now() + 60_000 : null;
       setFastSecondsLeft(60);
       setQuizId(session.quizId);
@@ -122,7 +122,7 @@ export default function QuizPlayScreen() {
   const next = async () => {
     const done = finalResult.current;
     if (done) {
-      const xpEarned = done.score * (XP_PER_QUESTION[difficulty] ?? 12);
+      const xpEarned = done.xp ?? done.score * (XP_PER_QUESTION[difficulty] ?? 12);
       await recordCompletedQuiz({ quizId: done.quizId, score: done.score, total: done.total, xp: xpEarned, durationSeconds: Math.round((Date.now() - startedAt.current) / 1000), finishedAt: done.finishedAt });
       router.replace({
         pathname: '/(quiz)/results',
