@@ -18,7 +18,7 @@ const message = (ratio: number) => {
 export default function QuizResultsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ category?: string; quizId?: string; score?: string; total?: string; seconds?: string; xp?: string }>();
+  const params = useLocalSearchParams<{ category?: string; quizId?: string; score?: string; total?: string; seconds?: string; xp?: string; challenge?: string }>();
   const category = findCategory(params.category);
 
   const [rank, setRank] = useState<number | null | undefined>(undefined);
@@ -58,7 +58,7 @@ export default function QuizResultsScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <IconButton icon="x" label="Close" onPress={() => router.replace('/home')} />
           <Text size={15} weight="semibold" color={colors.textMuted}>
-            Quiz complete
+            {params.challenge === 'daily' ? 'Daily challenge complete' : 'Quiz complete'}
           </Text>
           <View style={{ width: 44 }} />
         </View>
@@ -98,7 +98,7 @@ export default function QuizResultsScreen() {
           <Button
             label="Play again"
             onPress={() => router.replace({ pathname: '/(quiz)/setup', params: { category: params.category ?? 'any' } })}          />
-          <Button label="Review answers" variant="secondary" />
+          <Button label="Review answers" variant="secondary" onPress={() => router.push({ pathname: "/(quiz)/review", params: { quizId: params.quizId ?? "" } })} disabled={!params.quizId} />
           <Button label="Back to home" variant="ghost" onPress={() => router.replace('/home')} />
         </View>
       </ScrollView>

@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, fonts } from '../../theme';
 import { api, type QuizQuestion, type QuizSummary } from '../../lib/api';
 import { findCategory, shortName } from '../../hooks/useCategories';
-import { user } from '../../components/data/mock';
+import { getPlayerName, recordCompletedQuiz } from '../../lib/player';
 import { formatTime } from '../../components/data/format';
 import { useCountdown } from '../../hooks/useCountdown';
 import { Button, CategoryTag, OptionCard, OptionState, ProgressBar, Text } from '../../components/ui';
@@ -18,7 +18,7 @@ const SHOW_SOURCE = __DEV__; // temporaire : visible seulement en développement
 export default function QuizPlayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string }>();
+  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string; challenge?: string }>();
 
   const categoryId = params.category && params.category !== 'any' ? Number(params.category) : undefined;
   const category = findCategory(params.category);
@@ -45,12 +45,14 @@ export default function QuizPlayScreen() {
   const finalResult = useRef<QuizSummary | null>(null);
   const startedAt = useRef(Date.now());
   const booted = useRef(false);
+  const submitLock = useRef(false);
 
   const start = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName: user.firstName });
+      const playerName = await getPlayerName();
+      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName, timePerQuestion: timeLimit });
       setQuizId(session.quizId);
       setTotal(session.totalQuestions);
       setQuestion(session.question);
@@ -60,7 +62,7 @@ export default function QuizPlayScreen() {
     } finally {
       setLoading(false);
     }
-  }, [amount, categoryId, difficulty]);
+  }, [amount, categoryId, difficulty, timeLimit]);
 
   useEffect(() => {
     if (booted.current) return;
@@ -70,22 +72,24 @@ export default function QuizPlayScreen() {
 
   const send = useCallback(
     async (answer: string, isTimeout: boolean) => {
-      if (!quizId || submitting) return;
+      if (!quizId || submitting || submitLock.current) return;
+      submitLock.current = true;
       setSubmitting(true);
       try {
-        const res = await api.submitAnswer(quizId, answer);
+        const res = await api.submitAnswer(quizId, answer, index);
         nextQuestion.current = res.nextQuestion;
         finalResult.current = res.finished && res.result ? res.result : null;
-        setTimedOut(isTimeout);
+        setTimedOut(isTimeout || Boolean(res.timedOut));
         setFeedback({ isCorrect: res.isCorrect, correctAnswer: res.correctAnswer });
         setRevealed(true);
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erreur inconnue');
       } finally {
+        submitLock.current = false;
         setSubmitting(false);
       }
     },
-    [quizId, submitting],
+    [quizId, submitting, index],
   );
 
   const secondsLeft = useCountdown(timeLimit, !!question && !revealed && !submitting && !error, index, () =>
@@ -97,18 +101,21 @@ export default function QuizPlayScreen() {
     send(question.answers[selected], false);
   };
 
-  const next = () => {
+  const next = async () => {
     const done = finalResult.current;
     if (done) {
+      const xpEarned = done.score * (XP_PER_QUESTION[difficulty] ?? 12);
+      await recordCompletedQuiz({ quizId: done.quizId, score: done.score, total: done.total, xp: xpEarned, durationSeconds: Math.round((Date.now() - startedAt.current) / 1000), finishedAt: done.finishedAt });
       router.replace({
         pathname: '/(quiz)/results',
         params: {
           category: params.category ?? 'any',
+          challenge: params.challenge ?? '',
           quizId: done.quizId,
           score: String(done.score),
           total: String(done.total),
           seconds: String(Math.round((Date.now() - startedAt.current) / 1000)),
-          xp: String(done.score * (XP_PER_QUESTION[difficulty] ?? 12)),
+          xp: String(xpEarned),
         },
       });
       return;
@@ -171,7 +178,7 @@ export default function QuizPlayScreen() {
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, gap: 20 }}
       >
         <QuizTopBar
-          title={`Question ${index + 1} of ${total}`}
+          title={params.challenge === 'daily' ? `Daily challenge · ${index + 1}/${total}` : `Question ${index + 1} of ${total}`}
           onClose={() => router.replace('/home')}
           timer={timeLimit === null ? null : formatTime(secondsLeft)}
         />

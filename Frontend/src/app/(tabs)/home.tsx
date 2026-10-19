@@ -2,10 +2,10 @@ import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme';
-import { user } from '../../components/data/mock';
+import { usePlayer } from '../../hooks/usePlayer';
 import { formatNumber } from '../../components/data/format';
 import { Screen } from '../../components/Screen';
-import { Avatar, IconButton, SectionHeader, Text } from '../../components/ui';
+import { Avatar, SectionHeader, Text } from '../../components/ui';
 import { CategoryCard, DailyChallengeCard, StatCard } from '../../components/features';
 import { Button } from '../../components/ui';
 import { ActivityIndicator } from 'react-native';
@@ -20,6 +20,7 @@ const greeting = () => {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const player = usePlayer();
   const openCategory = (id: string) => router.push({ pathname: '/(quiz)/setup', params: { category: id } });
 
   const { categories, loading, error, reload } = useCategories();
@@ -33,17 +34,16 @@ export default function HomeScreen() {
     <Screen scroll>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <Avatar initials={user.initials} size={44} bg={colors.primarySoft} fg={colors.primary} fontSize={15} />
+          <Avatar initials={player.initials} size={44} bg={colors.primarySoft} fg={colors.primary} fontSize={15} />
           <View style={{ gap: 2 }}>
             <Text size={13} color={colors.textMuted}>
               {greeting()}
             </Text>
             <Text size={18} weight="semibold">
-              {user.firstName}
+              {player.firstName}
             </Text>
           </View>
         </View>
-        <IconButton icon="bell" label="Notifications" />
       </View>
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -51,19 +51,19 @@ export default function HomeScreen() {
           icon="flame"
           bg={colors.category.orange.bg}
           color={colors.category.orange.fg}
-          value={`${user.streak} days`}
+          value={`${player.streak} days`}
           label="Current streak"
         />
         <StatCard
           icon="zap"
           bg={colors.primarySoft}
           color={colors.primary}
-          value={formatNumber(user.xp)}
+          value={formatNumber(player.xp)}
           label="Total XP"
         />
       </View>
 
-      <DailyChallengeCard onPlay={() => openCategory('any')} />
+      <DailyChallengeCard onPlay={() => router.push({ pathname: '/(quiz)/play', params: { category: 'any', difficulty: 'medium', count: '10', time: '30', challenge: 'daily' } })} />
 
       <SectionHeader title="Categories" actionLabel="See all" onActionPress={() => router.push('/explore')} />
 

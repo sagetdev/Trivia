@@ -2,7 +2,8 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { api } from '../../lib/api';
-import { user, type Player } from '../../components/data/mock';
+import type { Player } from '../../components/data/mock';
+import { usePlayer } from '../../hooks/usePlayer';
 import type { CategoryColor } from '../../theme';
 import { colors } from '../../theme';
 import { Screen } from '../../components/Screen';
@@ -15,6 +16,7 @@ const initialsOf = (name: string) =>
   name.split(/\s+/).map((s) => s[0]).join('').slice(0, 2).toUpperCase();
 
 export default function RankingScreen() {
+  const player = usePlayer();
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,13 +35,13 @@ export default function RankingScreen() {
             score: e.score,
             total: e.total,
             color: palette[i % palette.length],
-            isMe: e.playerName === user.firstName,
+            isMe: e.playerName.toLowerCase() === player.name.toLowerCase(),
           })),
         ),
       )
       .catch((e) => setError(e instanceof Error ? e.message : 'Erreur inconnue'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [player.name]);
 
   useFocusEffect(load);
 

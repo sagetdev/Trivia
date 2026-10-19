@@ -73,7 +73,7 @@ export default function QuizSetupScreen() {
               {category.name}
             </Text>
             <Text size={14} color={colors.textMuted}>
-              Questions: The Trivia API
+              Questions from the active server provider
             </Text>
           </View>
 

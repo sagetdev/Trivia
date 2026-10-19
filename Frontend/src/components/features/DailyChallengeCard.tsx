@@ -18,7 +18,7 @@ export function DailyChallengeCard({ onPlay }: { onPlay: () => void }) {
         Today’s mixed quiz
       </Text>
       <Text size={14} color={colors.onPrimary} style={{ opacity: 0.85 }}>
-        10 questions · Earn 2× XP · about 3 min
+        10 questions · Mixed categories · about 3 min
       </Text>
       <Button label="Play now" variant="secondary" textColor={colors.primary} onPress={onPlay} />
     </View>

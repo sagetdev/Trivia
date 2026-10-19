@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
   },
   decor: { position: 'absolute', borderRadius: 999, backgroundColor: '#FFFFFF' },
   questionWrap: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
