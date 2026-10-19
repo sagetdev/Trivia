@@ -32,6 +32,9 @@ interface QuizSession {
   startedAt: string;
   questionStartedAt: number;
   timePerQuestion: number | null;
+  gameMode: "classic" | "fast" | "survival" | "progressive";
+  overallDeadlineAt: number | null;
+  mistakes: number;
   answers: AnswerReview[];
   finishedAt?: string;
 }
@@ -127,6 +130,7 @@ router.post("/quizzes", async (req, res) => {
   const difficulty = body.difficulty;
   const type = body.type;
   const playerName = body.playerName ?? "Joueur";
+  const gameMode = body.gameMode ?? "classic";
   const timePerQuestion = body.timePerQuestion === null || body.timePerQuestion === undefined
     ? null
     : body.timePerQuestion;
@@ -143,6 +147,7 @@ router.post("/quizzes", async (req, res) => {
   if (type !== undefined && !["multiple", "boolean"].includes(String(type))) {
     res.status(400).json({ error: "type invalide." }); return;
   }
+  if (!["classic", "fast", "survival", "progressive"].includes(String(gameMode))) { res.status(400).json({ error: "gameMode invalide." }); return; }
   if (timePerQuestion !== null && (typeof timePerQuestion !== "number" || ![15, 30, 45].includes(timePerQuestion))) {
     res.status(400).json({ error: "timePerQuestion doit être 15, 30, 45 ou null." }); return;
   }
@@ -151,12 +156,25 @@ router.post("/quizzes", async (req, res) => {
   }
 
   try {
-    const questions = await getQuestions({
-      amount,
-      categoryId: categoryId as number | undefined,
-      difficulty: difficulty as Difficulty | undefined,
-      type: type as QuestionType | undefined,
-    });
+    let questions: QuizQuestion[];
+    if (gameMode === "progressive") {
+      const easyCount = Math.ceil(amount / 3);
+      const hardCount = Math.floor(amount / 3);
+      const mediumCount = amount - easyCount - hardCount;
+      const [easy, medium, hard] = await Promise.all([
+        getQuestions({ amount: easyCount, categoryId: categoryId as number | undefined, difficulty: "easy", type: type as QuestionType | undefined }),
+        mediumCount ? getQuestions({ amount: mediumCount, categoryId: categoryId as number | undefined, difficulty: "medium", type: type as QuestionType | undefined }) : Promise.resolve([]),
+        hardCount ? getQuestions({ amount: hardCount, categoryId: categoryId as number | undefined, difficulty: "hard", type: type as QuestionType | undefined }) : Promise.resolve([]),
+      ]);
+      questions = [...easy, ...medium, ...hard];
+    } else {
+      questions = await getQuestions({
+        amount,
+        categoryId: categoryId as number | undefined,
+        difficulty: difficulty as Difficulty | undefined,
+        type: type as QuestionType | undefined,
+      });
+    }
     if (!questions.length) {
       res.status(502).json({ error: "Le fournisseur n'a retourné aucune question." }); return;
     }
@@ -170,7 +188,10 @@ router.post("/quizzes", async (req, res) => {
       score: 0,
       startedAt: new Date(now).toISOString(),
       questionStartedAt: now,
-      timePerQuestion: timePerQuestion as number | null,
+      timePerQuestion: gameMode === "fast" ? null : timePerQuestion as number | null,
+      gameMode: gameMode as QuizSession["gameMode"],
+      overallDeadlineAt: gameMode === "fast" ? now + 60_000 : null,
+      mistakes: 0,
       answers: [],
     };
     sessions.set(id, session);
@@ -218,8 +239,9 @@ router.post("/quizzes/:id/answers", async (req, res) => {
     res.status(409).json({ error: "Aucune question disponible." }); return;
   }
 
-  const timedOut = session.timePerQuestion !== null &&
-    Date.now() - session.questionStartedAt > session.timePerQuestion * 1000;
+  const overallTimedOut = session.overallDeadlineAt !== null && Date.now() > session.overallDeadlineAt;
+  const timedOut = overallTimedOut || (session.timePerQuestion !== null &&
+    Date.now() - session.questionStartedAt > session.timePerQuestion * 1000);
   if (!timedOut && answer !== "" && !question.answers.includes(answer)) {
     res.status(400).json({ error: "La réponse ne fait pas partie des choix proposés." }); return;
   }
@@ -237,9 +259,10 @@ router.post("/quizzes/:id/answers", async (req, res) => {
     timedOut: timedOut || answer === "",
   });
   if (isCorrect) session.score += 1;
+  else session.mistakes += 1;
 
   session.currentIndex += 1;
-  const finished = session.currentIndex >= session.questions.length;
+  const finished = session.currentIndex >= session.questions.length || (session.gameMode === "survival" && session.mistakes >= 3) || overallTimedOut;
   const now = Date.now();
   if (finished) {
     session.finishedAt = new Date(now).toISOString();
@@ -248,8 +271,8 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       quizId: session.id,
       playerName: session.playerName,
       score: session.score,
-      total,
-      accuracy: session.score / total,
+      total: session.answers.length,
+      accuracy: session.answers.length ? session.score / session.answers.length : 0,
       durationSeconds: Math.max(0, Math.round((now - Date.parse(session.startedAt)) / 1000)),
       finishedAt: session.finishedAt,
       category: session.questions[0]?.category ?? "Mixed",
@@ -268,6 +291,8 @@ router.post("/quizzes/:id/answers", async (req, res) => {
     answeredIndex: session.currentIndex - 1,
     score: session.score,
     totalQuestions: session.questions.length,
+    gameMode: session.gameMode,
+    mistakes: session.mistakes,
     finished,
     nextQuestion: finished ? null : currentQuestion(session),
     ...(finished ? { result: {
