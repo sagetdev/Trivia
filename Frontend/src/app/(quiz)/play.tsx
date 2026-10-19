@@ -50,7 +50,7 @@ export default function QuizPlayScreen() {
     setLoading(true);
     setError(null);
     try {
-      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName: user.firstName });
+      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName: user.firstName, timePerQuestion: timeLimit });
       setQuizId(session.quizId);
       setTotal(session.totalQuestions);
       setQuestion(session.question);
@@ -73,10 +73,10 @@ export default function QuizPlayScreen() {
       if (!quizId || submitting) return;
       setSubmitting(true);
       try {
-        const res = await api.submitAnswer(quizId, answer);
+        const res = await api.submitAnswer(quizId, answer, index);
         nextQuestion.current = res.nextQuestion;
         finalResult.current = res.finished && res.result ? res.result : null;
-        setTimedOut(isTimeout);
+        setTimedOut(isTimeout || Boolean(res.timedOut));
         setFeedback({ isCorrect: res.isCorrect, correctAnswer: res.correctAnswer });
         setRevealed(true);
       } catch (e) {
@@ -85,7 +85,7 @@ export default function QuizPlayScreen() {
         setSubmitting(false);
       }
     },
-    [quizId, submitting],
+    [quizId, submitting, index],
   );
 
   const secondsLeft = useCountdown(timeLimit, !!question && !revealed && !submitting && !error, index, () =>
