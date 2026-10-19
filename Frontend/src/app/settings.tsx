@@ -22,7 +22,7 @@ export default function SettingsScreen() {
       </View>
 
       <SettingsSection title="Account">
-        <SettingsRow icon="pencil" label="Edit profile" onPress={() => {}} />
+        <SettingsRow icon="pencil" label="Edit profile" onPress={() => router.push('/(tabs)/profile')} />
         <SettingsRow icon="bell" label="Notifications" toggle={notifications} onToggle={setNotifications} last />
       </SettingsSection>
 
