@@ -56,6 +56,7 @@ interface LeaderboardEntry {
 
 const sessions = new Map<string, QuizSession>();
 const leaderboard: LeaderboardEntry[] = [];
+const dailyQuestionCache = new Map<string, QuizQuestion[]>();
 let initialized = false;
 let persistQueue: Promise<void> = Promise.resolve();
 
@@ -189,6 +190,18 @@ router.post("/quizzes", async (req, res) => {
         hardCount ? getQuestions({ amount: hardCount, categoryId: categoryId as number | undefined, difficulty: "hard", type: type as QuestionType | undefined }) : Promise.resolve([]),
       ]);
       questions = [...easy, ...medium, ...hard];
+    } else if (challengeDate) {
+      const cachedQuestions = dailyQuestionCache.get(challengeDate);
+      if (cachedQuestions) questions = cachedQuestions;
+      else {
+        questions = await getQuestions({
+          amount: 10,
+          categoryId: undefined,
+          difficulty: difficulty as Difficulty,
+          type: "multiple",
+        });
+        dailyQuestionCache.set(challengeDate, questions);
+      }
     } else {
       questions = await getQuestions({
         amount,
