@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme';
-import { achievements } from '../../components/data/mock';
+import type { Achievement } from '../../components/data/mock';
 import { usePlayer } from '../../hooks/usePlayer';
 import { setPlayerName } from '../../lib/player';
 import { formatNumber } from '../../components/data/format';
@@ -26,6 +26,13 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const saveName = async () => { await setPlayerName(draft); await player.refresh(); setEditing(false); };
+
+  const achievements: Achievement[] = [
+    { id: 'first', label: 'First quiz', icon: 'flame', color: 'orange', locked: player.quizzes < 1 },
+    { id: 'perfect', label: 'Perfect', icon: 'target', color: 'purple', locked: !player.stats.records.some((record) => record.score === record.total && record.total > 0) },
+    { id: 'dedicated', label: '10 quizzes', icon: 'zap', color: 'blue', locked: player.quizzes < 10 },
+    { id: 'xp', label: '500 XP', icon: 'star', color: 'teal', locked: player.xp < 500 },
+  ];
 
   const stats = [
     { value: String(player.quizzes), label: 'Quizzes' },
@@ -77,13 +84,26 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      <SectionHeader title="Achievements" actionLabel="See all" />
+      <SectionHeader title="Achievements" />
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
         {achievements.map((a) => (
           <AchievementBadge key={a.id} item={a} />
         ))}
       </View>
+
+      <SectionHeader title="Recent quizzes" />
+      {player.stats.records.length === 0 ? (
+        <Text size={14} color={colors.textMuted}>Tes parties terminées apparaîtront ici.</Text>
+      ) : player.stats.records.slice(0, 3).map((record) => (
+        <Card key={record.quizId} radius={14} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14 }}>
+          <View style={{ gap: 4, flex: 1 }}>
+            <Text size={14} weight="semibold">{new Date(record.finishedAt).toLocaleDateString()}</Text>
+            <Text size={12} color={colors.textMuted}>{record.durationSeconds}s · +{record.xp} XP</Text>
+          </View>
+          <Text size={16} weight="bold">{record.score}/{record.total}</Text>
+        </Card>
+      ))}
 
       <Pressable accessibilityRole="button" onPress={() => { setDraft(player.name); setEditing((value) => !value); }}>
         <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
