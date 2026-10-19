@@ -78,7 +78,7 @@ export async function getCategories(): Promise<OpenTDBCategory[]> {
     `${BASE_URL}/api_category.php`,
   );
 
-  if (data.response_code !== 0 || !data.trivia_categories) {
+  if (!data.trivia_categories?.length) {
     throw new Error("Impossible de récupérer les catégories OpenTDB.");
   }
 
