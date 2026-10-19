@@ -52,6 +52,10 @@ export default function QuizReviewScreen() {
               );
             })}
             {item.timedOut && <Text size={12} color={colors.warning}>Temps écoulé</Text>}
+            <View style={{ padding: 12, borderRadius: 12, backgroundColor: colors.surface, gap: 4 }}>
+              <Text size={12} weight="semibold" color={colors.textMuted}>Explanation</Text>
+              <Text size={13} color={colors.textMuted}>{item.explanation || "The question provider did not supply an explanation for this answer."}</Text>
+            </View>
           </Card>
         ))}
         <Button label="Retour aux résultats" onPress={() => router.back()} variant="secondary" />
