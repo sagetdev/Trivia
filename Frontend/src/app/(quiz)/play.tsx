@@ -13,6 +13,7 @@ import { FeedbackSheet, QuizTopBar, Verdict } from '../../components/features';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 const XP_PER_QUESTION: Record<string, number> = { easy: 8, medium: 12, hard: 16 };
+const SHOW_SOURCE = __DEV__; // temporaire : visible seulement en développement
 
 export default function QuizPlayScreen() {
   const router = useRouter();
@@ -182,6 +183,12 @@ export default function QuizPlayScreen() {
           color={category.color}
           label={`${shortName(question.category)} · ${difficultyLabel}`}
         />
+
+        {SHOW_SOURCE && question.source ? (
+          <Text size={11} color={colors.textFaint}>
+            Source : {question.source}
+          </Text> 
+        ) : null}
 
         <RNText
           style={{ fontFamily: fonts.bold, fontSize: 26, lineHeight: 34, color: colors.text, includeFontPadding: false }}

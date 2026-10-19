@@ -14,6 +14,7 @@ export interface QuizQuestion {
   type: QuestionType;
   question: string;
   answers: string[];
+    source?: string;
 }
 
 export interface QuizSession {

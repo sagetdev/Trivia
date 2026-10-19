@@ -24,7 +24,7 @@ export default function HomeScreen() {
 
   const { categories, loading, error, reload } = useCategories();
 
-  const HOME_LIMIT = 25;
+  const HOME_LIMIT = 50;
   const shown = categories.slice(0, HOME_LIMIT);
   const rows: (typeof categories)[] = [];
   for (let i = 0; i < shown.length; i += 2) rows.push(shown.slice(i, i + 2));

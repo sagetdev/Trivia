@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   getCategories,
   getQuestions,
+  providerName,
   type QuizQuestion,
   type Difficulty,
   type QuestionType,
@@ -38,6 +39,7 @@ function publicQuestion(question: QuizQuestion) {
     type: question.type,
     question: question.question,
     answers: question.answers,
+    source: providerName,
   };
 }
 
