@@ -115,7 +115,6 @@ export async function getQuestions(options: {
 
   const params = new URLSearchParams({
     amount: String(options.amount),
-    encode: "default",
   });
 
   if (options.categoryId !== undefined) {
