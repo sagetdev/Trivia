@@ -57,6 +57,7 @@ interface LeaderboardEntry {
 
 const sessions = new Map<string, QuizSession>();
 const leaderboard: LeaderboardEntry[] = [];
+const completedRecords: LeaderboardEntry[] = [];
 const dailyQuestionCache = new Map<string, QuizQuestion[]>();
 let initialized = false;
 let persistQueue: Promise<void> = Promise.resolve();
@@ -65,6 +66,7 @@ async function persist(): Promise<void> {
   const snapshot = {
     sessions: [...sessions.entries()],
     leaderboard: [...leaderboard],
+    records: [...completedRecords],
   };
   persistQueue = persistQueue.catch(() => {}).then(() => writePersistentState(snapshot));
   await persistQueue;
@@ -76,6 +78,10 @@ export async function initializeQuizRoutes(): Promise<void> {
   for (const [id, session] of saved.sessions) {
     if (session && typeof session === "object") sessions.set(id, session as QuizSession);
   }
+  for (const entry of saved.records ?? []) {
+    if (entry && typeof entry === "object") completedRecords.push(entry as LeaderboardEntry);
+  }
+  if (completedRecords.length === 0) completedRecords.push(...saved.leaderboard as LeaderboardEntry[]);
   for (const entry of saved.leaderboard) {
     if (entry && typeof entry === "object") leaderboard.push(entry as LeaderboardEntry);
   }
@@ -146,7 +152,7 @@ router.post("/quizzes", async (req, res) => {
   if (challengeDate && challengeDate !== new Date().toISOString().slice(0, 10)) {
     res.status(400).json({ error: "Le défi quotidien doit correspondre à la date UTC actuelle." }); return;
   }
-  if (challengeDate && (leaderboard.some((entry) => entry.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && entry.challengeDate === challengeDate) || [...sessions.values()].some((session) => session.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && session.challengeDate === challengeDate && !session.finishedAt && Date.now() - Date.parse(session.startedAt) < 30 * 60 * 1000))) {
+  if (challengeDate && (completedRecords.some((entry) => entry.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && entry.challengeDate === challengeDate) || [...sessions.values()].some((session) => session.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && session.challengeDate === challengeDate && !session.finishedAt && Date.now() - Date.parse(session.startedAt) < 30 * 60 * 1000))) {
     res.status(409).json({ error: "Tu as déjà terminé le défi quotidien aujourd'hui." }); return;
   }
   const amount = challengeDate ? 10 : body.amount ?? 10;
@@ -304,7 +310,7 @@ router.post("/quizzes/:id/answers", async (req, res) => {
   const now = Date.now();
   if (finished) {
     session.finishedAt = new Date(now).toISOString();
-    leaderboard.push({
+    const completedRecord: LeaderboardEntry = {
       quizId: session.id,
       playerName: session.playerName,
       score: session.score,
@@ -315,7 +321,9 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       category: session.categoryName ?? "Mixed",
       xp: calculateXp(session),
       ...(session.challengeDate ? { challengeDate: session.challengeDate } : {}),
-    });
+    };
+    completedRecords.push(completedRecord);
+    leaderboard.push(completedRecord);
     leaderboard.sort((a, b) => b.accuracy - a.accuracy || b.score - a.score || a.durationSeconds - b.durationSeconds);
     leaderboard.splice(1000);
   } else {
@@ -386,7 +394,7 @@ router.get("/leaderboard", (req, res) => {
 router.get("/stats", (req, res) => {
   const name = typeof req.query.playerName === "string" ? req.query.playerName.trim().toLowerCase() : "";
   if (!name) { res.status(400).json({ error: "playerName est requis." }); return; }
-  const records = leaderboard.filter((entry) => entry.playerName.toLowerCase() === name);
+  const records = completedRecords.filter((entry) => entry.playerName.toLowerCase() === name);
   const totalQuestions = records.reduce((sum, entry) => sum + entry.total, 0);
   const correctAnswers = records.reduce((sum, entry) => sum + entry.score, 0);
   const categoryStats = new Map<string, { quizzes: number; correct: number; total: number }>();
@@ -410,7 +418,7 @@ router.get("/history", (req, res) => {
   if (!name) {
     res.status(400).json({ error: "playerName est requis." }); return;
   }
-  const history = leaderboard
+  const history = completedRecords
     .filter((entry) => entry.playerName.toLowerCase() === name)
     .sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt))
     .slice(0, 50);
