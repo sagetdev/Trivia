@@ -14,7 +14,6 @@ export const providerName = openTdbOnly
 
 const TRIVIA_CATEGORY_BY_OPEN_TDB_ID: Record<number, number> = {
   9: 101,  // General Knowledge
-  10: 107, // Books -> Arts & Literature
   11: 105, // Film
   12: 106, // Music
   14: 105, // Television
@@ -22,7 +21,6 @@ const TRIVIA_CATEGORY_BY_OPEN_TDB_ID: Record<number, number> = {
   21: 108, // Sports
   22: 104, // Geography
   23: 103, // History
-  25: 107, // Art
 };
 
 export const getCategories: () => Promise<{ id: number; name: string }[]> =
