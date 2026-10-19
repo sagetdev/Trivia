@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,13 +18,6 @@ export default function MultiplayerScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { getPlayerName().then(setName).catch(() => {}); }, []);
-  const sync = useCallback(async () => {
-    if (!room || !playerId) return;
-    try { setRoom(await api.getRoom(room.code, playerId)); } catch (e) {
-      setError(e instanceof Error ? e.message : "Impossible de synchroniser la salle.");
-    }
-  }, [room?.code, playerId]);
-
   useEffect(() => {
     if (!room || !playerId || room.status === "finished") return;
     const timer = setInterval(() => { api.getRoom(room.code, playerId).then(setRoom).catch(() => {}); }, 1800);
