@@ -28,7 +28,7 @@ export interface AnswerReview {
 }
 export interface LeaderboardEntry extends QuizSummary { rank: number; accuracy?: number }
 export interface PlayerAnalytics {
-  playerName: string; quizzes: number; correctAnswers: number; totalQuestions: number;
+  playerName: string; quizzes: number; xp: number; correctAnswers: number; totalQuestions: number;
   accuracy: number; averageDurationSeconds: number;
   categories: { category: string; quizzes: number; correct: number; total: number; accuracy: number }[];
   history: LeaderboardEntry[];
