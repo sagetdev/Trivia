@@ -45,6 +45,7 @@ export default function QuizPlayScreen() {
   const finalResult = useRef<QuizSummary | null>(null);
   const startedAt = useRef(Date.now());
   const booted = useRef(false);
+  const submitLock = useRef(false);
 
   const start = useCallback(async () => {
     setLoading(true);
@@ -71,7 +72,8 @@ export default function QuizPlayScreen() {
 
   const send = useCallback(
     async (answer: string, isTimeout: boolean) => {
-      if (!quizId || submitting) return;
+      if (!quizId || submitting || submitLock.current) return;
+      submitLock.current = true;
       setSubmitting(true);
       try {
         const res = await api.submitAnswer(quizId, answer, index);
@@ -83,6 +85,7 @@ export default function QuizPlayScreen() {
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Erreur inconnue');
       } finally {
+        submitLock.current = false;
         setSubmitting(false);
       }
     },
