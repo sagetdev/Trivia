@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import quizRoutes, { initializeQuizRoutes } from "./routes/quiz.routes";
+import advancedRoutes from "./routes/advanced.routes";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -13,6 +14,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api", quizRoutes);
+app.use("/api", advancedRoutes);
 app.use((_req, res) => res.status(404).json({ error: "Route introuvable." }));
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error("[api-error]", error);
