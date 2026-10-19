@@ -7,9 +7,20 @@ type RoomPlayer = { id: string; name: string; score: number; answers: number; co
 type Room = {
   code: string; hostId: string; status: "waiting" | "playing" | "finished";
   createdAt: string; categoryId?: number; difficulty: Difficulty; amount: number;
-  timePerQuestion: number | null; questions: QuizQuestion[]; currentIndex: number;
+  timePerQuestion: number | null; questions: QuizQuestion[]; currentIndex: number; questionStartedAt: number;
   players: RoomPlayer[]; answerKeys: Record<string, { answer: string; at: number }>;
 };
+function advanceTimedOutRoom(room: Room): void {
+  if (room.status !== "playing" || room.timePerQuestion === null) return;
+  if (Date.now() - room.questionStartedAt < room.timePerQuestion * 1000) return;
+  for (const player of room.players) {
+    const key = `${room.currentIndex}:${player.id}`;
+    if (!room.answerKeys[key]) room.answerKeys[key] = { answer: "", at: Date.now() };
+  }
+  room.currentIndex += 1;
+  if (room.currentIndex >= room.questions.length) room.status = "finished";
+  else room.questionStartedAt = Date.now();
+}
 const rooms = new Map<string, Room>();
 const roomCode = () => Math.random().toString(36).slice(2, 8).toUpperCase();
 const safeRoom = (room: Room, playerId?: string) => ({
@@ -47,7 +58,7 @@ router.post("/rooms", async (req, res) => {
     const room: Room = {
       code, hostId: playerId, status: "waiting", createdAt: new Date().toISOString(),
       categoryId, difficulty: difficulty as Difficulty, amount, timePerQuestion: time,
-      questions, currentIndex: 0, players: [{ id: playerId, name, score: 0, answers: 0, connectedAt: new Date().toISOString() }],
+      questions, currentIndex: 0, questionStartedAt: 0, players: [{ id: playerId, name, score: 0, answers: 0, connectedAt: new Date().toISOString() }],
       answerKeys: {},
     };
     rooms.set(code, room);
@@ -76,12 +87,14 @@ router.post("/rooms/:code/start", (req, res) => {
   if (room.status !== "waiting") { res.status(409).json({ error: "La partie a déjà commencé." }); return; }
   if (room.players.length < 2) { res.status(409).json({ error: "Il faut au moins deux joueurs pour commencer." }); return; }
   room.status = "playing";
+  room.questionStartedAt = Date.now();
   res.json(safeRoom(room, room.hostId));
 });
 
 router.get("/rooms/:code", (req, res) => {
   const room = findRoom(req.params.code);
   if (!room) { res.status(404).json({ error: "Salle introuvable." }); return; }
+  advanceTimedOutRoom(room);
   const playerId = typeof req.query.playerId === "string" ? req.query.playerId : undefined;
   if (playerId && !room.players.some((p) => p.id === playerId)) { res.status(403).json({ error: "Joueur inconnu dans cette salle." }); return; }
   res.json(safeRoom(room, playerId));
@@ -90,6 +103,7 @@ router.get("/rooms/:code", (req, res) => {
 router.post("/rooms/:code/answers", (req, res) => {
   const room = findRoom(req.params.code);
   if (!room) { res.status(404).json({ error: "Salle introuvable." }); return; }
+  advanceTimedOutRoom(room);
   if (room.status !== "playing") { res.status(409).json({ error: "La partie n'est pas en cours." }); return; }
   const { playerId, answer, questionIndex } = req.body ?? {};
   const player = room.players.find((p) => p.id === playerId);
@@ -109,6 +123,7 @@ router.post("/rooms/:code/answers", (req, res) => {
   if (allAnswered) {
     room.currentIndex += 1;
     if (room.currentIndex >= room.questions.length) room.status = "finished";
+    else room.questionStartedAt = Date.now();
   }
   res.json({ correct, correctAnswer: question.correctAnswer, allAnswered, room: safeRoom(room, playerId) });
 });
