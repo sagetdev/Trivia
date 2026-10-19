@@ -33,7 +33,7 @@ export default function QuizReviewScreen() {
           <Card key={`${index}-${item.question}`} radius={18} style={{ padding: 16, gap: 12 }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
               <Text size={12} color={colors.textMuted}>Question {index + 1} · {item.difficulty}</Text>
-              <Icon name={item.isCorrect ? "check-circle" : "x-circle"} size={20} color={item.isCorrect ? colors.success : colors.error} />
+              <Icon name={item.isCorrect ? "check" : "x"} size={20} color={item.isCorrect ? colors.success : colors.error} />
             </View>
             <Text size={17} weight="semibold">{item.question}</Text>
             {item.answers.map((option) => {
