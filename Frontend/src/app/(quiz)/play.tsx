@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors, fonts } from '../../theme';
 import { api, type QuizQuestion, type QuizSummary } from '../../lib/api';
 import { findCategory, shortName } from '../../hooks/useCategories';
-import { user } from '../../components/data/mock';
+import { getPlayerName, recordCompletedQuiz } from '../../lib/player';
 import { formatTime } from '../../components/data/format';
 import { useCountdown } from '../../hooks/useCountdown';
 import { Button, CategoryTag, OptionCard, OptionState, ProgressBar, Text } from '../../components/ui';
@@ -50,7 +50,8 @@ export default function QuizPlayScreen() {
     setLoading(true);
     setError(null);
     try {
-      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName: user.firstName, timePerQuestion: timeLimit });
+      const playerName = await getPlayerName();
+      const session = await api.createQuiz({ amount, categoryId, difficulty, playerName, timePerQuestion: timeLimit });
       setQuizId(session.quizId);
       setTotal(session.totalQuestions);
       setQuestion(session.question);
@@ -97,9 +98,11 @@ export default function QuizPlayScreen() {
     send(question.answers[selected], false);
   };
 
-  const next = () => {
+  const next = async () => {
     const done = finalResult.current;
     if (done) {
+      const xpEarned = done.score * (XP_PER_QUESTION[difficulty] ?? 12);
+      await recordCompletedQuiz({ quizId: done.quizId, score: done.score, total: done.total, xp: xpEarned, durationSeconds: Math.round((Date.now() - startedAt.current) / 1000), finishedAt: done.finishedAt });
       router.replace({
         pathname: '/(quiz)/results',
         params: {
@@ -108,7 +111,7 @@ export default function QuizPlayScreen() {
           score: String(done.score),
           total: String(done.total),
           seconds: String(Math.round((Date.now() - startedAt.current) / 1000)),
-          xp: String(done.score * (XP_PER_QUESTION[difficulty] ?? 12)),
+          xp: String(xpEarned),
         },
       });
       return;
