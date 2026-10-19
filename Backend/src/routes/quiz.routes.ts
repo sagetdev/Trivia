@@ -146,7 +146,7 @@ router.post("/quizzes", async (req, res) => {
   if (challengeDate && challengeDate !== new Date().toISOString().slice(0, 10)) {
     res.status(400).json({ error: "Le défi quotidien doit correspondre à la date UTC actuelle." }); return;
   }
-  if (challengeDate && leaderboard.some((entry) => entry.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && entry.challengeDate === challengeDate)) {
+  if (challengeDate && (leaderboard.some((entry) => entry.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && entry.challengeDate === challengeDate) || [...sessions.values()].some((session) => session.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && session.challengeDate === challengeDate && !session.finishedAt && Date.now() - Date.parse(session.startedAt) < 30 * 60 * 1000))) {
     res.status(409).json({ error: "Tu as déjà terminé le défi quotidien aujourd'hui." }); return;
   }
   const amount = challengeDate ? 10 : body.amount ?? 10;
