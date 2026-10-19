@@ -26,6 +26,20 @@ export interface AnswerReview {
   selectedAnswer: string | null; correctAnswer: string; isCorrect: boolean; timedOut: boolean;
 }
 export interface LeaderboardEntry extends QuizSummary { rank: number; accuracy?: number }
+export interface PlayerAnalytics {
+  playerName: string; quizzes: number; correctAnswers: number; totalQuestions: number;
+  accuracy: number; averageDurationSeconds: number;
+  categories: { category: string; quizzes: number; correct: number; total: number; accuracy: number }[];
+  history: LeaderboardEntry[];
+}
+export type LeaderboardScope = "global" | "week" | "category" | "friends";
+export interface DailyChallenge { date: string; amount: number; difficulty: Difficulty; timePerQuestion: number | null; resetTimezone: string }
+export interface RoomPlayer { id: string; name: string; score: number; answers: number; isYou?: boolean }
+export interface RoomSnapshot {
+  code: string; status: "waiting" | "playing" | "finished"; createdAt: string; difficulty: Difficulty;
+  amount: number; currentIndex: number; totalQuestions: number; players: RoomPlayer[];
+  question: QuizQuestion | null; playerId?: string;
+}
 export interface CreateQuizOptions {
   amount?: number; categoryId?: number; difficulty?: Difficulty; type?: QuestionType;
   playerName?: string; timePerQuestion?: number | null;
@@ -58,6 +72,20 @@ export const api = {
     request<AnswerResult>(`/quizzes/${encodeURIComponent(quizId)}/answers`, { method: "POST", body: JSON.stringify({ answer, questionIndex }) }),
   getResults: (quizId: string) => request<QuizSummary>(`/quizzes/${encodeURIComponent(quizId)}/results`),
   getReview: (quizId: string) => request<{ quizId: string; score: number; total: number; answers: AnswerReview[] }>(`/quizzes/${encodeURIComponent(quizId)}/review`),
-  getLeaderboard: async () => (await request<{ leaderboard: LeaderboardEntry[] }>("/leaderboard")).leaderboard,
+  getLeaderboard: async (scope: LeaderboardScope = "global", category?: string, players?: string[]) => {
+    const params = new URLSearchParams({ scope });
+    if (category) params.set("category", category);
+    if (players?.length) params.set("players", players.join(","));
+    return (await request<{ leaderboard: LeaderboardEntry[] }>(`/leaderboard?${params.toString()}`)).leaderboard;
+  },
+  getStats: (playerName: string) => request<PlayerAnalytics>(`/stats?playerName=${encodeURIComponent(playerName)}`),
+  getDailyChallenge: () => request<DailyChallenge>("/daily-challenge"),
+  createRoom: (options: CreateQuizOptions) => request<RoomSnapshot>("/rooms", { method: "POST", body: JSON.stringify(options) }),
+  joinRoom: (code: string, playerName: string) => request<RoomSnapshot>(`/rooms/${encodeURIComponent(code)}/join`, { method: "POST", body: JSON.stringify({ playerName }) }),
+  startRoom: (code: string, playerId: string) => request<RoomSnapshot>(`/rooms/${encodeURIComponent(code)}/start`, { method: "POST", body: JSON.stringify({ playerId }) }),
+  getRoom: (code: string, playerId?: string) => request<RoomSnapshot>(`/rooms/${encodeURIComponent(code)}${playerId ? `?playerId=${encodeURIComponent(playerId)}` : ""}`),
+  submitRoomAnswer: (code: string, playerId: string, answer: string, questionIndex: number) =>
+    request<{ correct: boolean; correctAnswer: string; allAnswered: boolean; room: RoomSnapshot }>(`/rooms/${encodeURIComponent(code)}/answers`, { method: "POST", body: JSON.stringify({ playerId, answer, questionIndex }) }),
+  getRoomResults: (code: string) => request<{ code: string; results: { rank: number; playerName: string; score: number; total: number }[] }>(`/rooms/${encodeURIComponent(code)}/results`),
   getHistory: async (playerName: string) => (await request<{ history: LeaderboardEntry[] }>(`/history?playerName=${encodeURIComponent(playerName)}`)).history,
 };
