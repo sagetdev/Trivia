@@ -12,6 +12,12 @@ const difficulties = [
   { id: 'hard', label: 'Hard', xp: 16 },
 ] as const;
 const counts = [5, 10, 15, 20];
+const modes = [
+  { id: 'classic', label: 'Classic' },
+  { id: 'fast', label: '60s rush' },
+  { id: 'survival', label: 'Survival' },
+  { id: 'progressive', label: 'Progressive' },
+] as const;
 const times = [
   { id: '15', label: '15s' },
   { id: '30', label: '30s' },
@@ -40,6 +46,7 @@ export default function QuizSetupScreen() {
   const [difficulty, setDifficulty] = useState<(typeof difficulties)[number]['id']>('medium');
   const [count, setCount] = useState(10);
   const [time, setTime] = useState('30');
+  const [gameMode, setGameMode] = useState<(typeof modes)[number]['id']>('classic');
 
   const xpPerQuestion = difficulties.find((d) => d.id === difficulty)!.xp;
   const seconds = time === 'none' ? 20 : Number(time) * 0.6;
@@ -48,7 +55,7 @@ export default function QuizSetupScreen() {
   const start = () =>
     router.push({
       pathname: '/(quiz)/play',
-      params: { category: category.id, difficulty, count: String(count), time },
+      params: { category: category.id, difficulty, count: String(count), time, gameMode },
     });
 
   return (
@@ -77,6 +84,10 @@ export default function QuizSetupScreen() {
             </Text>
           </View>
 
+          <OptionGroup title="Game mode">
+            {modes.map((mode) => <Chip key={mode.id} label={mode.label} active={gameMode === mode.id} onPress={() => setGameMode(mode.id)} style={{ flex: 1 }} />)}
+          </OptionGroup>
+
           <OptionGroup title="Difficulty">
             {difficulties.map((d) => (
               <Chip key={d.id} label={d.label} active={difficulty === d.id} onPress={() => setDifficulty(d.id)} style={{ flex: 1 }} />
@@ -99,7 +110,7 @@ export default function QuizSetupScreen() {
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
               <Icon name="clock" size={16} color={colors.textMuted} />
               <Text size={13} weight="medium" color={colors.textMuted}>
-                About {minutes} min
+                {gameMode === 'fast' ? '60 seconds total' : gameMode === 'survival' ? 'Ends after 3 mistakes' : gameMode === 'progressive' ? 'Easy → medium → hard' : `About ${minutes} min`}
               </Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
