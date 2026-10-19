@@ -74,7 +74,7 @@ export default function QuizSetupScreen() {
     });
   };
 
-  const chipStyle = (basis: string) => ({ width: basis, flexGrow: 1 } as const);
+  const chipStyle = (basis: `${number}%`) => ({ width: basis, flexGrow: 1 } as const);
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -116,7 +116,7 @@ export default function QuizSetupScreen() {
         </OptionGroup>
 
         <View style={{ borderRadius: 16, padding: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-          <Icon name={gameMode === 'fast' ? 'zap' : gameMode === 'survival' ? 'heart' : gameMode === 'progressive' ? 'trending-up' : 'target'} size={20} color={colors.primary} />
+          <Icon name={gameMode === 'fast' ? 'zap' : gameMode === 'survival' ? 'shield' : gameMode === 'progressive' ? 'activity' : 'target'} size={20} color={colors.primary} />
           <View style={{ flex: 1, gap: 4 }}>
             <Text size={14} weight="semibold">{selectedMode.label}</Text>
             <Text size={13} color={colors.textMuted}>{selectedMode.description}</Text>
