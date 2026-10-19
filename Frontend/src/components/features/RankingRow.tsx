@@ -2,7 +2,6 @@ import React from 'react';
 import { View } from 'react-native';
 import { colors } from '../../theme';
 import type { Player } from '../data/mock';
-import { formatNumber } from '../../data/format';
 import { Avatar, Text } from '../ui';
 
 export function RankingRow({ player }: { player: Player }) {
@@ -35,7 +34,7 @@ export function RankingRow({ player }: { player: Player }) {
         {player.name}
       </Text>
       <Text size={14} weight="semibold" color={me ? colors.primary : colors.text}>
-        {formatNumber(player.xp)} XP
+        {player.score}/{player.total} XP
       </Text>
     </View>
   );

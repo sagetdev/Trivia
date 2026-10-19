@@ -2,11 +2,14 @@ import React from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme';
-import { categories, user } from '../../components/data/mock';
+import { user } from '../../components/data/mock';
 import { formatNumber } from '../../components/data/format';
 import { Screen } from '../../components/Screen';
 import { Avatar, IconButton, SectionHeader, Text } from '../../components/ui';
 import { CategoryCard, DailyChallengeCard, StatCard } from '../../components/features';
+import { Button } from '../../components/ui';
+import { ActivityIndicator } from 'react-native';
+import { useCategories } from '../../hooks/useCategories';
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -19,7 +22,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const openCategory = (id: string) => router.push({ pathname: '/(quiz)/setup', params: { category: id } });
 
-  const rows = [0, 2, 4].map((i) => categories.slice(i, i + 2));
+  const { categories, loading, error, reload } = useCategories();
+  const rows = [0, 2, 4].map((i) => categories.slice(i, i + 2)).filter((r) => r.length);
 
   return (
     <Screen scroll>
@@ -55,19 +59,29 @@ export default function HomeScreen() {
         />
       </View>
 
-      <DailyChallengeCard onPlay={() => openCategory('science')} />
+      <DailyChallengeCard onPlay={() => openCategory('any')} />
 
       <SectionHeader title="Categories" actionLabel="See all" onActionPress={() => router.push('/explore')} />
 
-      <View style={{ gap: 12 }}>
-        {rows.map((row, i) => (
-          <View key={i} style={{ flexDirection: 'row', gap: 12 }}>
-            {row.map((c) => (
-              <CategoryCard key={c.id} category={c} onPress={() => openCategory(c.id)} />
-            ))}
-          </View>
-        ))}
-      </View>
+      {loading ? (
+        <ActivityIndicator color={colors.primary} />
+      ) : error ? (
+        <View style={{ gap: 12 }}>
+          <Text size={14} color={colors.textMuted}>{error}</Text>
+          <Button label="Réessayer" variant="soft" onPress={reload} />
+        </View>
+      ) : (
+        <View style={{ gap: 12 }}>
+          {rows.map((row, i) => (
+            <View key={i} style={{ flexDirection: 'row', gap: 12 }}>
+              {row.map((c) => (
+                <CategoryCard key={c.id} category={c} onPress={() => openCategory(c.id)} />
+              ))}
+              {row.length === 1 && <View style={{ flex: 1 }} />}
+            </View>
+          ))}
+        </View>
+      )}
     </Screen>
   );
 }

@@ -1,39 +1,24 @@
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { TextInput, View } from "react-native";
-import { categories, Tag } from "../../components/data/mock";
+import { ActivityIndicator, TextInput, View } from "react-native";
+import { useCategories, type Category } from "../../hooks/useCategories";
 import { CategoryCard } from "../../components/features";
 import { Screen } from "../../components/Screen";
-import { Chip, Icon, Text } from "../../components/ui";
+import { Button, Icon, Text } from "../../components/ui";
 import { colors, fonts } from "../../theme";
-
-type Filter = "all" | Tag;
-
-const filters: { id: Filter; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "popular", label: "Popular" },
-  { id: "new", label: "New" },
-  { id: "trending", label: "Trending" },
-];
 
 export default function ExploreScreen() {
   const router = useRouter();
+  const { categories, loading, error, reload } = useCategories();
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
 
   const results = useMemo(
-    () =>
-      categories.filter(
-        (c) =>
-          (filter === "all" || c.tags.includes(filter)) &&
-          c.name.toLowerCase().includes(query.trim().toLowerCase()),
-      ),
-    [query, filter],
+    () => categories.filter((c) => c.name.toLowerCase().includes(query.trim().toLowerCase())),
+    [categories, query],
   );
 
-  const rows: (typeof categories)[] = [];
-  for (let i = 0; i < results.length; i += 2)
-    rows.push(results.slice(i, i + 2));
+  const rows: Category[][] = [];
+  for (let i = 0; i < results.length; i += 2) rows.push(results.slice(i, i + 2));
 
   return (
     <Screen scroll>
@@ -69,16 +54,8 @@ export default function ExploreScreen() {
         />
       </View>
 
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-        {filters.map((f) => (
-          <Chip
-            key={f.id}
-            label={f.label}
-            active={filter === f.id}
-            onPress={() => setFilter(f.id)}
-          />
-        ))}
-      </View>
+      {loading && <ActivityIndicator color={colors.primary} />}
+      {error && <Button label="Réessayer" variant="soft" onPress={reload} />}
 
       <View style={{ gap: 12 }}>
         {rows.map((row, i) => (

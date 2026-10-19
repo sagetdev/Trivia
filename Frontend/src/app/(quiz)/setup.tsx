@@ -3,7 +3,7 @@ import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
-import { getCategory } from '../../components/data/mock';
+import { findCategory } from '../../hooks/useCategories';
 import { Button, Chip, Icon, IconButton, IconTile, Text } from '../../components/ui';
 
 const difficulties = [
@@ -34,7 +34,7 @@ export default function QuizSetupScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { category: categoryId } = useLocalSearchParams<{ category?: string }>();
-  const category = getCategory(categoryId);
+  const category = findCategory(categoryId);
   const c = colors.category[category.color];
 
   const [difficulty, setDifficulty] = useState<(typeof difficulties)[number]['id']>('medium');
@@ -73,7 +73,7 @@ export default function QuizSetupScreen() {
               {category.name}
             </Text>
             <Text size={14} color={colors.textMuted}>
-              {category.questions} questions · {category.players} players this week
+              Questions from Open Trivia DB
             </Text>
           </View>
 

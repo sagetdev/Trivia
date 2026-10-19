@@ -1,11 +1,12 @@
-import React from 'react';
+import { useState, useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
-import { getCategory } from '../../components/data/mock';
+import { findCategory } from '@/hooks/useCategories';
 import { formatTime } from '../../components/data/format';
 import { Button, Card, Icon, IconButton, IconName, ScoreRing, Text } from '../../components/ui';
+import { api } from '@/lib/api';
 
 const message = (ratio: number) => {
   if (ratio >= 0.8) return 'Great job!';
@@ -13,17 +14,27 @@ const message = (ratio: number) => {
   return 'Keep practicing!';
 };
 
+
 export default function QuizResultsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ category?: string; score?: string; total?: string; seconds?: string; xp?: string }>();
+  const params = useLocalSearchParams<{ category?: string; quizId?: string; score?: string; total?: string; seconds?: string; xp?: string }>();
+  const category = findCategory(params.category);
 
-  const category = getCategory(params.category);
+  const [rank, setRank] = useState<number | null | undefined>(undefined);
+
   const score = Number(params.score) || 0;
   const total = Number(params.total) || 10;
   const seconds = Number(params.seconds) || 0;
   const xp = Number(params.xp) || 0;
-  const percentile = Math.min(99, Math.round((score / total) * 95));
+
+  useEffect(() => {
+    if (!params.quizId) return setRank(null);
+    api
+      .getLeaderboard()
+      .then((list: any) => setRank(list.find((e: any) => e.quizId === params.quizId)?.rank ?? null))
+      .catch(() => setRank(null));
+  }, [params.quizId]);
 
   const stats: { icon: IconName; color: string; value: string; label: string }[] = [
     { icon: 'check', color: colors.success, value: String(score), label: 'Correct' },
@@ -60,7 +71,11 @@ export default function QuizResultsScreen() {
               {message(score / total)}
             </Text>
             <Text size={16} lineHeight={24} color={colors.textMuted} align="center">
-              You scored higher than {percentile}% of players on {category.name} today.
+              {rank === undefined
+                ? 'Calcul de ton classement…'
+                : rank
+                  ? `You’re #${rank} on the global leaderboard.`
+                  : 'Not in the top 100 yet — keep playing!'}
             </Text>
           </View>
 
@@ -82,8 +97,7 @@ export default function QuizResultsScreen() {
         <View style={{ gap: 8 }}>
           <Button
             label="Play again"
-            onPress={() => router.replace({ pathname: '/quiz/setup', params: { category: category.id } })}
-          />
+            onPress={() => router.replace({ pathname: '/(quiz)/setup', params: { category: params.category ?? 'any' } })}          />
           <Button label="Review answers" variant="secondary" />
           <Button label="Back to home" variant="ghost" onPress={() => router.replace('/home')} />
         </View>

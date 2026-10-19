@@ -1,0 +1,3242 @@
+
+===== \Backend\src\routes\quiz.routes.ts =====
+
+import { Router, type Request, type Response } from "express";
+import { randomUUID } from "node:crypto";
+import {
+  getCategories,
+  getQuestions,
+  type QuizQuestion,
+  type Difficulty,
+  type QuestionType,
+} from "../services/opentdb.service";
+
+const router = Router();
+
+interface QuizSession {
+  id: string;
+  playerName: string;
+  questions: QuizQuestion[];
+  currentIndex: number;
+  score: number;
+  answeredCurrent: boolean;
+  finishedAt?: string;
+}
+
+interface LeaderboardEntry {
+  quizId: string;
+  playerName: string;
+  score: number;
+  total: number;
+  finishedAt: string;
+}
+
+const sessions = new Map<string, QuizSession>();
+const leaderboard: LeaderboardEntry[] = [];
+
+function publicQuestion(question: QuizQuestion) {
+  return {
+    category: question.category,
+    difficulty: question.difficulty,
+    type: question.type,
+    question: question.question,
+    answers: question.answers,
+  };
+}
+
+function getSession(id: string, res: Response): QuizSession | undefined {
+  const session = sessions.get(id);
+
+  if (!session) {
+    res.status(404).json({ error: "Partie introuvable." });
+    return undefined;
+  }
+
+  return session;
+}
+
+function currentQuestion(session: QuizSession) {
+  const question = session.questions[session.currentIndex];
+  return question ? publicQuestion(question) : null;
+}
+
+router.get("/categories", async (_req, res) => {
+  try {
+    const categories = await getCategories();
+    res.json({ categories });
+  } catch (error) {
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Erreur OpenTDB.",
+    });
+  }
+});
+
+router.post("/quizzes", async (req, res) => {
+  const body = req.body as Record<string, unknown>;
+
+  const amount = body.amount ?? 10;
+  const categoryId = body.categoryId;
+  const difficulty = body.difficulty;
+  const type = body.type;
+  const playerName = body.playerName ?? "Joueur";
+
+  if (
+    typeof amount !== "number" ||
+    !Number.isInteger(amount) ||
+    amount < 1 ||
+    amount > 20
+  ) {
+    res.status(400).json({ error: "amount doit être entre 1 et 20." });
+    return;
+  }
+
+  if (
+    categoryId !== undefined &&
+    (typeof categoryId !== "number" ||
+      !Number.isInteger(categoryId) ||
+      categoryId < 1)
+  ) {
+    res.status(400).json({ error: "categoryId invalide." });
+    return;
+  }
+
+  if (
+    difficulty !== undefined &&
+    !["easy", "medium", "hard"].includes(String(difficulty))
+  ) {
+    res.status(400).json({ error: "difficulty invalide." });
+    return;
+  }
+
+  if (
+    type !== undefined &&
+    !["multiple", "boolean"].includes(String(type))
+  ) {
+    res.status(400).json({ error: "type invalide." });
+    return;
+  }
+
+  if (
+    typeof playerName !== "string" ||
+    playerName.trim().length < 1 ||
+    playerName.trim().length > 30
+  ) {
+    res.status(400).json({ error: "playerName doit contenir 1 à 30 caractères." });
+    return;
+  }
+
+  try {
+    const questions = await getQuestions({
+      amount,
+      categoryId: categoryId as number | undefined,
+      difficulty: difficulty as Difficulty | undefined,
+      type: type as QuestionType | undefined,
+    });
+
+    const id = randomUUID();
+
+    const session: QuizSession = {
+      id,
+      playerName: playerName.trim(),
+      questions,
+      currentIndex: 0,
+      score: 0,
+      answeredCurrent: false,
+    };
+
+    sessions.set(id, session);
+
+    res.status(201).json({
+      quizId: id,
+      totalQuestions: questions.length,
+      question: publicQuestion(questions[0]),
+    });
+  } catch (error) {
+    res.status(502).json({
+      error: error instanceof Error ? error.message : "Impossible de créer la partie.",
+    });
+  }
+});
+
+router.get("/quizzes/:id", (req, res) => {
+  const session = getSession(req.params.id, res);
+  if (!session) return;
+
+  res.json({
+    quizId: session.id,
+    currentIndex: session.currentIndex,
+    totalQuestions: session.questions.length,
+    score: session.score,
+    finished: Boolean(session.finishedAt),
+    question: currentQuestion(session),
+  });
+});
+
+router.post("/quizzes/:id/answers", (req, res) => {
+  const session = getSession(req.params.id, res);
+  if (!session) return;
+
+  if (session.finishedAt) {
+    res.status(409).json({ error: "Cette partie est terminée." });
+    return;
+  }
+
+  if (session.answeredCurrent) {
+    res.status(409).json({ error: "Tu as déjà répondu à cette question." });
+    return;
+  }
+
+  const answer = req.body?.answer;
+
+  if (typeof answer !== "string") {
+    res.status(400).json({ error: "answer doit être une chaîne de caractères." });
+    return;
+  }
+
+  const question = session.questions[session.currentIndex];
+
+  if (!question) {
+    res.status(409).json({ error: "Aucune question disponible." });
+    return;
+  }
+
+  const isCorrect = answer === question.correctAnswer;
+
+  session.answeredCurrent = true;
+
+  if (isCorrect) {
+    session.score += 1;
+  }
+
+  const answeredIndex = session.currentIndex;
+
+  // La bonne réponse n'est révélée qu'après la soumission.
+  session.currentIndex += 1;
+  session.answeredCurrent = false;
+
+  const finished = session.currentIndex >= session.questions.length;
+
+  if (finished) {
+    session.finishedAt = new Date().toISOString();
+
+    leaderboard.push({
+      quizId: session.id,
+      playerName: session.playerName,
+      score: session.score,
+      total: session.questions.length,
+      finishedAt: session.finishedAt,
+    });
+
+    leaderboard.sort(
+      (a, b) => b.score / b.total - a.score / a.total || b.score - a.score,
+    );
+
+    leaderboard.splice(100);
+  }
+
+  res.json({
+    isCorrect,
+    correctAnswer: question.correctAnswer,
+    answeredIndex,
+    score: session.score,
+    totalQuestions: session.questions.length,
+    finished,
+    nextQuestion: finished ? null : currentQuestion(session),
+    ...(finished
+      ? {
+          result: {
+            quizId: session.id,
+            playerName: session.playerName,
+            score: session.score,
+            total: session.questions.length,
+            finishedAt: session.finishedAt,
+          },
+        }
+      : {}),
+  });
+});
+
+router.get("/quizzes/:id/results", (req, res) => {
+  const session = getSession(req.params.id, res);
+  if (!session) return;
+
+  if (!session.finishedAt) {
+    res.status(409).json({ error: "La partie n'est pas terminée." });
+    return;
+  }
+
+  res.json({
+    quizId: session.id,
+    playerName: session.playerName,
+    score: session.score,
+    total: session.questions.length,
+    finishedAt: session.finishedAt,
+  });
+});
+
+router.get("/leaderboard", (_req, res) => {
+  res.json({
+    leaderboard: leaderboard.map((entry, index) => ({
+      rank: index + 1,
+      ...entry,
+    })),
+  });
+});
+
+export default router;
+
+===== \Backend\src\services\opentdb.service.ts =====
+
+import he from "he";
+
+const BASE_URL = "https://opentdb.com";
+
+export type Difficulty = "easy" | "medium" | "hard";
+export type QuestionType = "multiple" | "boolean";
+
+export interface QuizQuestion {
+  category: string;
+  difficulty: Difficulty;
+  type: QuestionType;
+  question: string;
+  correctAnswer: string;
+  answers: string[];
+}
+
+interface OpenTDBCategory {
+  id: number;
+  name: string;
+}
+
+interface OpenTDBQuestion {
+  category: string;
+  difficulty: Difficulty;
+  type: QuestionType;
+  question: string;
+  correct_answer: string;
+  incorrect_answers: string[];
+}
+
+interface OpenTDBResponse<T> {
+  response_code: number;
+  results?: T[];
+  trivia_categories?: OpenTDBCategory[];
+}
+
+let categoriesCache:
+  | { expiresAt: number; data: OpenTDBCategory[] }
+  | undefined;
+
+let lastQuestionRequest = 0;
+let questionQueue: Promise<void> = Promise.resolve();
+
+function decode(value: string): string {
+  return he.decode(value);
+}
+
+function shuffle<T>(items: T[]): T[] {
+  const result = [...items];
+
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+
+  return result;
+}
+
+async function request<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenTDB a répondu HTTP ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+export async function getCategories(): Promise<OpenTDBCategory[]> {
+  if (categoriesCache && categoriesCache.expiresAt > Date.now()) {
+    return categoriesCache.data;
+  }
+
+  const data = await request<OpenTDBResponse<never>>(
+    `${BASE_URL}/api_category.php`,
+  );
+
+  if (data.response_code !== 0 || !data.trivia_categories) {
+    throw new Error("Impossible de récupérer les catégories OpenTDB.");
+  }
+
+  categoriesCache = {
+    data: data.trivia_categories,
+    expiresAt: Date.now() + 5 * 60 * 1000,
+  };
+
+  return data.trivia_categories;
+}
+
+async function waitForQuestionSlot(): Promise<void> {
+  const task = questionQueue.then(async () => {
+    const wait = Math.max(0, 5000 - (Date.now() - lastQuestionRequest));
+
+    if (wait > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, wait));
+    }
+
+    lastQuestionRequest = Date.now();
+  });
+
+  questionQueue = task.catch(() => {});
+  await task;
+}
+
+export async function getQuestions(options: {
+  amount: number;
+  categoryId?: number;
+  difficulty?: Difficulty;
+  type?: QuestionType;
+}): Promise<QuizQuestion[]> {
+  await waitForQuestionSlot();
+
+  const params = new URLSearchParams({
+    amount: String(options.amount),
+    encode: "default",
+  });
+
+  if (options.categoryId !== undefined) {
+    params.set("category", String(options.categoryId));
+  }
+
+  if (options.difficulty) {
+    params.set("difficulty", options.difficulty);
+  }
+
+  if (options.type) {
+    params.set("type", options.type);
+  }
+
+  const data = await request<OpenTDBResponse<OpenTDBQuestion>>(
+    `${BASE_URL}/api.php?${params.toString()}`,
+  );
+
+  if (data.response_code === 1) {
+    throw new Error(
+      "Pas assez de questions pour ces filtres. Essaie une autre catégorie ou difficulté.",
+    );
+  }
+
+  if (data.response_code === 5) {
+    throw new Error("OpenTDB limite les requêtes. Réessaie dans quelques secondes.");
+  }
+
+  if (data.response_code !== 0 || !data.results) {
+    throw new Error(`Réponse OpenTDB invalide (code ${data.response_code}).`);
+  }
+
+  return data.results.map((item) => {
+    const correctAnswer = decode(item.correct_answer);
+    const answers = shuffle([
+      correctAnswer,
+      ...item.incorrect_answers.map(decode),
+    ]);
+
+    return {
+      category: decode(item.category),
+      difficulty: item.difficulty,
+      type: item.type,
+      question: decode(item.question),
+      correctAnswer,
+      answers,
+    };
+  });
+}
+
+===== \Backend\src\server.ts =====
+
+import "dotenv/config";
+import express from "express";
+import quizRoutes from "./routes/quiz.routes";
+
+const app = express();
+const port = Number(process.env.PORT ?? 4000);
+
+app.use(express.json({ limit: "20kb" }));
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    service: "RoamApp API",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.use("/api", quizRoutes);
+
+app.use((_req, res) => {
+  res.status(404).json({ error: "Route introuvable." });
+});
+
+app.use(
+  (
+    error: Error,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction,
+  ) => {
+    console.error(error);
+    res.status(500).json({ error: "Erreur interne du serveur." });
+  },
+);
+
+app.listen(port, "0.0.0.0", () => {
+  console.log(`RoamApp API démarrée sur http://localhost:${port}`);
+});
+
+===== \Backend\package.json =====
+
+{
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.8",
+    "express": "^5.3.0",
+    "he": "^2.0.0"
+  },
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/he": "^1.2.3",
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
+
+===== \Backend\tsconfig.json =====
+
+
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "rootDir": "src",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
+
+===== \Frontend\.claude\settings.json =====
+
+{
+  "enabledPlugins": {
+    "expo@claude-plugins-official": true
+  }
+}
+
+===== \Frontend\.vscode\extensions.json =====
+
+{ "recommendations": ["expo.vscode-expo-tools"] }
+
+===== \Frontend\.vscode\settings.json =====
+
+{
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit",
+    "source.sortMembers": "explicit"
+  }
+}
+
+===== \Frontend\assets\expo.icon\icon.json =====
+
+{
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.00000,0.47843,1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "expo-symbol 2.svg",
+          "name" : "expo-symbol 2",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              1.1008400065293245e-05,
+              -16.046875
+            ]
+          }
+        },
+        {
+          "image-name" : "grid.png",
+          "name" : "grid"
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
+
+===== \Frontend\src\app\(quiz)\_layout.tsx =====
+
+import React from 'react';
+import { Stack } from 'expo-router';
+import { colors } from '../../src/theme';
+
+export default function QuizLayout() {
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }}>
+      <Stack.Screen name="play" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="results" options={{ gestureEnabled: false }} />
+    </Stack>
+  );
+}
+
+===== \Frontend\src\app\(quiz)\play.tsx =====
+
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { ScrollView, Text as RNText, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors, fonts } from '../../theme';
+import { getCategory, getQuestions } from '../../components/data/mock';
+import { formatTime } from '../../components/data/format';
+import { useCountdown } from '../../hooks/useCountdown';
+import { Button, CategoryTag, OptionCard, OptionState, ProgressBar } from '../../components/ui';
+import { FeedbackSheet, QuizTopBar, Verdict } from '../../components/features';
+
+const LETTERS = ['A', 'B', 'C', 'D'];
+const LIFELINES = 2;
+const XP_PER_QUESTION: Record<string, number> = { easy: 8, medium: 12, hard: 16 };
+
+export default function QuizPlayScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string }>();
+
+  const category = getCategory(params.category);
+  const difficulty = params.difficulty ?? 'medium';
+  const total = Number(params.count) || 10;
+  const timeLimit = params.time === 'none' ? null : Number(params.time) || 30;
+
+  const questions = useMemo(() => getQuestions(total), [total]);
+  const [index, setIndex] = useState(0);
+  const [selected, setSelected] = useState<number | null>(null);
+  const [revealed, setRevealed] = useState(false);
+  const [removed, setRemoved] = useState<number[]>([]);
+  const [lifelines, setLifelines] = useState(LIFELINES);
+  const [timedOut, setTimedOut] = useState(false);
+
+  const correctCount = useRef(0);
+  const startedAt = useRef(Date.now());
+
+  const question = questions[index];
+  const isLast = index === questions.length - 1;
+
+  const reveal = useCallback(
+    (choice: number | null) => {
+      if (choice !== null && choice === question.correctIndex) correctCount.current += 1;
+      setRevealed(true);
+    },
+    [question],
+  );
+
+  const secondsLeft = useCountdown(timeLimit, !revealed, index, () => {
+    setTimedOut(true);
+    reveal(null);
+  });
+
+  const submit = () => {
+    if (selected === null) return;
+    reveal(selected);
+  };
+
+  const applyLifeline = () => {
+    if (lifelines === 0 || revealed) return;
+    const wrong = question.options
+      .map((_, i) => i)
+      .filter((i) => i !== question.correctIndex && i !== selected);
+    setRemoved(wrong.sort(() => Math.random() - 0.5).slice(0, 2));
+    setLifelines((n) => n - 1);
+  };
+
+  const next = () => {
+    if (isLast) {
+      router.replace({
+        pathname: '/(quiz)/results',
+        params: {
+          category: category.id,
+          score: String(correctCount.current),
+          total: String(questions.length),
+          seconds: String(Math.round((Date.now() - startedAt.current) / 1000)),
+          xp: String(correctCount.current * (XP_PER_QUESTION[difficulty] ?? 12)),
+        },
+      });
+      return;
+    }
+    setIndex((i) => i + 1);
+    setSelected(null);
+    setRevealed(false);
+    setRemoved([]);
+    setTimedOut(false);
+  };
+
+  const stateFor = (i: number): OptionState => {
+    if (!revealed) return selected === i ? 'selected' : 'default';
+    if (i === question.correctIndex) return 'correct';
+    if (i === selected) return 'wrong';
+    return 'default';
+  };
+
+  const verdict: Verdict = !revealed
+    ? 'wrong'
+    : timedOut
+      ? 'timeout'
+      : selected === question.correctIndex
+        ? 'correct'
+        : 'wrong';
+
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, gap: 20 }}
+      >
+        <QuizTopBar
+          title={`Question ${index + 1} of ${questions.length}`}
+          onClose={() => router.replace('/home')}
+          timer={timeLimit === null ? null : formatTime(secondsLeft)}
+        />
+
+        <ProgressBar progress={(index + 1) / questions.length} />
+
+        <CategoryTag
+          icon={category.icon}
+          color={category.color}
+          label={`${category.name} · ${difficulty.charAt(0).toUpperCase()}${difficulty.slice(1)}`}
+        />
+
+        <RNText
+          style={{ fontFamily: fonts.bold, fontSize: 26, lineHeight: 34, color: colors.text, includeFontPadding: false }}
+        >
+          {question.text}
+        </RNText>
+
+        <View style={{ gap: 12 }}>
+          {question.options.map((option, i) => (
+            <OptionCard
+              key={option}
+              letter={LETTERS[i]}
+              label={option}
+              state={stateFor(i)}
+              disabled={revealed || removed.includes(i)}
+              dimmed={removed.includes(i) && !revealed}
+              onPress={() => setSelected(i)}
+            />
+          ))}
+        </View>
+      </ScrollView>
+
+      {revealed ? (
+        <FeedbackSheet
+          verdict={verdict}
+          answer={question.options[question.correctIndex]}
+          explanation={question.explanation}
+          isLast={isLast}
+          onNext={next}
+        />
+      ) : (
+        <View style={{ paddingHorizontal: 20, paddingBottom: Math.max(insets.bottom, 20) + 14, gap: 12 }}>
+          <Button
+            label={`Use 50:50 lifeline (${lifelines} left)`}
+            variant="soft"
+            disabled={lifelines === 0 || removed.length > 0}
+            onPress={applyLifeline}
+          />
+          <Button label="Submit answer" disabled={selected === null} onPress={submit} />
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+===== \Frontend\src\app\(quiz)\results.tsx =====
+
+import React from 'react';
+import { ScrollView, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors } from '../../theme';
+import { getCategory } from '../../components/data/mock';
+import { formatTime } from '../../components/data/format';
+import { Button, Card, Icon, IconButton, IconName, ScoreRing, Text } from '../../components/ui';
+
+const message = (ratio: number) => {
+  if (ratio >= 0.8) return 'Great job!';
+  if (ratio >= 0.5) return 'Nice effort!';
+  return 'Keep practicing!';
+};
+
+export default function QuizResultsScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ category?: string; score?: string; total?: string; seconds?: string; xp?: string }>();
+
+  const category = getCategory(params.category);
+  const score = Number(params.score) || 0;
+  const total = Number(params.total) || 10;
+  const seconds = Number(params.seconds) || 0;
+  const xp = Number(params.xp) || 0;
+  const percentile = Math.min(99, Math.round((score / total) * 95));
+
+  const stats: { icon: IconName; color: string; value: string; label: string }[] = [
+    { icon: 'check', color: colors.success, value: String(score), label: 'Correct' },
+    { icon: 'clock', color: colors.warning, value: formatTime(seconds), label: 'Time' },
+    { icon: 'zap', color: colors.primary, value: `+${xp}`, label: 'XP earned' },
+  ];
+
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'space-between',
+          paddingHorizontal: 20,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 20) + 14,
+          gap: 24,
+        }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <IconButton icon="x" label="Close" onPress={() => router.replace('/home')} />
+          <Text size={15} weight="semibold" color={colors.textMuted}>
+            Quiz complete
+          </Text>
+          <View style={{ width: 44 }} />
+        </View>
+
+        <View style={{ alignItems: 'center', gap: 24 }}>
+          <ScoreRing score={score} total={total} />
+
+          <View style={{ alignItems: 'center', gap: 8, width: '100%' }}>
+            <Text size={32} weight="bold">
+              {message(score / total)}
+            </Text>
+            <Text size={16} lineHeight={24} color={colors.textMuted} align="center">
+              You scored higher than {percentile}% of players on {category.name} today.
+            </Text>
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 12, width: '100%' }}>
+            {stats.map((s) => (
+              <Card key={s.label} radius={16} style={{ flex: 1, alignItems: 'center', gap: 4, padding: 14 }}>
+                <Icon name={s.icon} size={20} color={s.color} />
+                <Text size={18} weight="semibold">
+                  {s.value}
+                </Text>
+                <Text size={12} color={colors.textMuted}>
+                  {s.label}
+                </Text>
+              </Card>
+            ))}
+          </View>
+        </View>
+
+        <View style={{ gap: 8 }}>
+          <Button
+            label="Play again"
+            onPress={() => router.replace({ pathname: '/quiz/setup', params: { category: category.id } })}
+          />
+          <Button label="Review answers" variant="secondary" />
+          <Button label="Back to home" variant="ghost" onPress={() => router.replace('/home')} />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+===== \Frontend\src\app\(quiz)\setup.tsx =====
+
+import React, { useState } from 'react';
+import { ScrollView, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors } from '../../theme';
+import { getCategory } from '../../components/data/mock';
+import { Button, Chip, Icon, IconButton, IconTile, Text } from '../../components/ui';
+
+const difficulties = [
+  { id: 'easy', label: 'Easy', xp: 8 },
+  { id: 'medium', label: 'Medium', xp: 12 },
+  { id: 'hard', label: 'Hard', xp: 16 },
+] as const;
+const counts = [5, 10, 15, 20];
+const times = [
+  { id: '15', label: '15s' },
+  { id: '30', label: '30s' },
+  { id: '45', label: '45s' },
+  { id: 'none', label: 'None' },
+];
+
+function OptionGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ gap: 10 }}>
+      <Text size={16} weight="semibold">
+        {title}
+      </Text>
+      <View style={{ flexDirection: 'row', gap: 8 }}>{children}</View>
+    </View>
+  );
+}
+
+export default function QuizSetupScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { category: categoryId } = useLocalSearchParams<{ category?: string }>();
+  const category = getCategory(categoryId);
+  const c = colors.category[category.color];
+
+  const [difficulty, setDifficulty] = useState<(typeof difficulties)[number]['id']>('medium');
+  const [count, setCount] = useState(10);
+  const [time, setTime] = useState('30');
+
+  const xpPerQuestion = difficulties.find((d) => d.id === difficulty)!.xp;
+  const seconds = time === 'none' ? 20 : Number(time) * 0.6;
+  const minutes = Math.max(1, Math.round((count * seconds) / 60));
+
+  const start = () =>
+    router.push({
+      pathname: '/(quiz)/play',
+      params: { category: category.id, difficulty, count: String(count), time },
+    });
+
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          flexGrow: 1,
+          justifyContent: 'space-between',
+          paddingHorizontal: 20,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 20) + 14,
+          gap: 24,
+        }}
+      >
+        <View style={{ gap: 24 }}>
+          <IconButton icon="chevron-left" label="Back" onPress={() => router.back()} />
+
+          <View style={{ alignItems: 'center', gap: 10, padding: 24, borderRadius: 24, backgroundColor: c.bg }}>
+            <IconTile icon={category.icon} bg={colors.surface} color={c.fg} size={64} iconSize={32} radius={19} />
+            <Text size={28} weight="bold">
+              {category.name}
+            </Text>
+            <Text size={14} color={colors.textMuted}>
+              {category.questions} questions · {category.players} players this week
+            </Text>
+          </View>
+
+          <OptionGroup title="Difficulty">
+            {difficulties.map((d) => (
+              <Chip key={d.id} label={d.label} active={difficulty === d.id} onPress={() => setDifficulty(d.id)} style={{ flex: 1 }} />
+            ))}
+          </OptionGroup>
+
+          <OptionGroup title="Number of questions">
+            {counts.map((n) => (
+              <Chip key={n} label={String(n)} active={count === n} onPress={() => setCount(n)} style={{ flex: 1 }} />
+            ))}
+          </OptionGroup>
+
+          <OptionGroup title="Time per question">
+            {times.map((t) => (
+              <Chip key={t.id} label={t.label} active={time === t.id} onPress={() => setTime(t.id)} style={{ flex: 1 }} />
+            ))}
+          </OptionGroup>
+
+          <View style={{ flexDirection: 'row', gap: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon name="clock" size={16} color={colors.textMuted} />
+              <Text size={13} weight="medium" color={colors.textMuted}>
+                About {minutes} min
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon name="zap" size={16} color={colors.primary} />
+              <Text size={13} weight="medium" color={colors.textMuted}>
+                +{count * xpPerQuestion} XP
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <Button label="Start quiz" onPress={start} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+===== \Frontend\src\app\(tabs)\_layout.tsx =====
+
+import { Tabs } from "expo-router";
+import { TabBar } from "../../components/TabBar";
+
+export default function TabsLayout() {
+  return (
+    <Tabs
+      tabBar={(props) => <TabBar {...props} />}
+      screenOptions={{ headerShown: false }}
+    >
+      <Tabs.Screen name="home" />
+      <Tabs.Screen name="explore" />
+      <Tabs.Screen name="ranking" />
+      <Tabs.Screen name="profile" />
+    </Tabs>
+  );
+}
+
+===== \Frontend\src\app\(tabs)\explore.tsx =====
+
+import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
+import { TextInput, View } from "react-native";
+import { categories, Tag } from "../../components/data/mock";
+import { CategoryCard } from "../../components/features";
+import { Screen } from "../../components/Screen";
+import { Chip, Icon, Text } from "../../components/ui";
+import { colors, fonts } from "../../theme";
+
+type Filter = "all" | Tag;
+
+const filters: { id: Filter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "popular", label: "Popular" },
+  { id: "new", label: "New" },
+  { id: "trending", label: "Trending" },
+];
+
+export default function ExploreScreen() {
+  const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<Filter>("all");
+
+  const results = useMemo(
+    () =>
+      categories.filter(
+        (c) =>
+          (filter === "all" || c.tags.includes(filter)) &&
+          c.name.toLowerCase().includes(query.trim().toLowerCase()),
+      ),
+    [query, filter],
+  );
+
+  const rows: (typeof categories)[] = [];
+  for (let i = 0; i < results.length; i += 2)
+    rows.push(results.slice(i, i + 2));
+
+  return (
+    <Screen scroll>
+      <Text size={28} weight="bold">
+        Explore
+      </Text>
+
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          height: 50,
+          paddingHorizontal: 17,
+          borderRadius: 16,
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}
+      >
+        <Icon name="search" size={20} color={colors.textFaint} />
+        <TextInput
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search topics"
+          placeholderTextColor={colors.textFaint}
+          style={{
+            flex: 1,
+            fontFamily: fonts.regular,
+            fontSize: 15,
+            color: colors.text,
+          }}
+        />
+      </View>
+
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+        {filters.map((f) => (
+          <Chip
+            key={f.id}
+            label={f.label}
+            active={filter === f.id}
+            onPress={() => setFilter(f.id)}
+          />
+        ))}
+      </View>
+
+      <View style={{ gap: 12 }}>
+        {rows.map((row, i) => (
+          <View key={i} style={{ flexDirection: "row", gap: 12 }}>
+            {row.map((c) => (
+              <CategoryCard
+                key={c.id}
+                category={c}
+                variant="large"
+                onPress={() =>
+                  router.push({
+                    pathname: "/(quiz)/setup",
+                    params: { category: c.id },
+                  })
+                }
+              />
+            ))}
+            {row.length === 1 && <View style={{ flex: 1 }} />}
+          </View>
+        ))}
+        {results.length === 0 && (
+          <Text size={15} color={colors.textMuted} align="center">
+            No topics found
+          </Text>
+        )}
+      </View>
+    </Screen>
+  );
+}
+
+===== \Frontend\src\app\(tabs)\home.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { colors } from '../../theme';
+import { categories, user } from '../../components/data/mock';
+import { formatNumber } from '../../components/data/format';
+import { Screen } from '../../components/Screen';
+import { Avatar, IconButton, SectionHeader, Text } from '../../components/ui';
+import { CategoryCard, DailyChallengeCard, StatCard } from '../../components/features';
+
+const greeting = () => {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+};
+
+export default function HomeScreen() {
+  const router = useRouter();
+  const openCategory = (id: string) => router.push({ pathname: '/(quiz)/setup', params: { category: id } });
+
+  const rows = [0, 2, 4].map((i) => categories.slice(i, i + 2));
+
+  return (
+    <Screen scroll>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Avatar initials={user.initials} size={44} bg={colors.primarySoft} fg={colors.primary} fontSize={15} />
+          <View style={{ gap: 2 }}>
+            <Text size={13} color={colors.textMuted}>
+              {greeting()}
+            </Text>
+            <Text size={18} weight="semibold">
+              {user.firstName}
+            </Text>
+          </View>
+        </View>
+        <IconButton icon="bell" label="Notifications" />
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <StatCard
+          icon="flame"
+          bg={colors.category.orange.bg}
+          color={colors.category.orange.fg}
+          value={`${user.streak} days`}
+          label="Current streak"
+        />
+        <StatCard
+          icon="zap"
+          bg={colors.primarySoft}
+          color={colors.primary}
+          value={formatNumber(user.xp)}
+          label="Total XP"
+        />
+      </View>
+
+      <DailyChallengeCard onPlay={() => openCategory('science')} />
+
+      <SectionHeader title="Categories" actionLabel="See all" onActionPress={() => router.push('/explore')} />
+
+      <View style={{ gap: 12 }}>
+        {rows.map((row, i) => (
+          <View key={i} style={{ flexDirection: 'row', gap: 12 }}>
+            {row.map((c) => (
+              <CategoryCard key={c.id} category={c} onPress={() => openCategory(c.id)} />
+            ))}
+          </View>
+        ))}
+      </View>
+    </Screen>
+  );
+}
+
+===== \Frontend\src\app\(tabs)\profile.tsx =====
+
+import React from 'react';
+import { Pressable, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { colors } from '../../theme';
+import { achievements, user } from '../../components/data/mock';
+import { formatNumber } from '../../components/data/format';
+import { Screen } from '../../components/Screen';
+import {
+  Avatar,
+  Card,
+  Icon,
+  IconButton,
+  IconTile,
+  ProgressBar,
+  SectionHeader,
+  Text,
+} from '../../components/ui';
+import { AchievementBadge } from '../../components/features';
+
+const stats = [
+  { value: String(user.quizzes), label: 'Quizzes' },
+  { value: `${user.accuracy}%`, label: 'Accuracy' },
+  { value: `${user.bestStreak} days`, label: 'Best streak' },
+];
+
+export default function ProfileScreen() {
+  const router = useRouter();
+
+  return (
+    <Screen scroll>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text size={28} weight="bold">
+          Profile
+        </Text>
+        <IconButton icon="settings" label="Settings" onPress={() => router.push('/settings')} />
+      </View>
+
+      <View style={{ alignItems: 'center', gap: 8 }}>
+        <Avatar initials={user.initials} size={88} bg={colors.primary} fg={colors.onPrimary} fontSize={30} />
+        <Text size={22} weight="bold">
+          {user.name}
+        </Text>
+        <Text size={14} color={colors.textMuted}>
+          {user.handle} · Level {user.level}
+        </Text>
+
+        <View style={{ width: '100%', gap: 6 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text size={13} weight="medium" color={colors.textMuted}>
+              {formatNumber(user.xp)} / {formatNumber(user.nextLevelXp)} XP
+            </Text>
+            <Text size={13} weight="semibold" color={colors.primary}>
+              Level {user.level + 1}
+            </Text>
+          </View>
+          <ProgressBar progress={user.xp / user.nextLevelXp} />
+        </View>
+      </View>
+
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        {stats.map((s) => (
+          <Card key={s.label} radius={16} style={{ flex: 1, alignItems: 'center', gap: 2, padding: 14 }}>
+            <Text size={18} weight="bold" numberOfLines={1}>
+              {s.value}
+            </Text>
+            <Text size={12} color={colors.textMuted}>
+              {s.label}
+            </Text>
+          </Card>
+        ))}
+      </View>
+
+      <SectionHeader title="Achievements" actionLabel="See all" />
+
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        {achievements.map((a) => (
+          <AchievementBadge key={a.id} item={a} />
+        ))}
+      </View>
+
+      <Pressable accessibilityRole="button">
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
+          <IconTile icon="pencil" bg={colors.primarySoft} color={colors.primary} size={36} iconSize={18} radius={11} />
+          <Text size={16} weight="medium" style={{ flex: 1 }}>
+            Edit profile
+          </Text>
+          <Icon name="chevron-right" size={20} color={colors.textFaint} />
+        </Card>
+      </Pressable>
+    </Screen>
+  );
+}
+
+===== \Frontend\src\app\(tabs)\ranking.tsx =====
+
+import React, { useState } from 'react';
+import { View } from 'react-native';
+import { getLeaderboard, Period, periods } from '../../components/data/mock';
+import { Screen } from '../../components/Screen';
+import { Card, SegmentedControl, Text } from '../../components/ui';
+import { PodiumItem, RankingRow } from '../../components/features';
+
+export default function RankingScreen() {
+  const [period, setPeriod] = useState<Period>('weekly');
+  const players = getLeaderboard(period);
+
+  const byRank = (r: number) => players.find((p) => p.rank === r)!;
+  const podium = [byRank(2), byRank(1), byRank(3)];
+  const rest = players.filter((p) => p.rank > 3);
+
+  return (
+    <Screen scroll>
+      <Text size={28} weight="bold">
+        Leaderboard
+      </Text>
+
+      <SegmentedControl options={periods} value={period} onChange={setPeriod} />
+
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 12 }}>
+        {podium.map((p) => (
+          <PodiumItem key={p.rank} player={p} />
+        ))}
+      </View>
+
+      <Card radius={20} style={{ padding: 8, gap: 2 }}>
+        {rest.map((p) => (
+          <RankingRow key={p.rank} player={p} />
+        ))}
+      </Card>
+    </Screen>
+  );
+}
+
+===== \Frontend\src\app\_layout.tsx =====
+
+import React, { useEffect } from 'react';
+import { Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import {
+  useFonts,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
+import { colors } from '../theme';
+
+SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout() {
+  const [loaded] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });
+
+  useEffect(() => {
+    if (loaded) SplashScreen.hideAsync();
+  }, [loaded]);
+
+  if (!loaded) return null;
+
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="dark" />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.bg } }} />
+    </SafeAreaProvider>
+  );
+}
+
+===== \Frontend\src\app\index.tsx =====
+
+import { Redirect } from 'expo-router';
+
+export default function Index() {
+  return <Redirect href="/home" />;
+}
+
+===== \Frontend\src\app\settings.tsx =====
+
+import React, { useState } from 'react';
+import { View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { colors } from '../theme';
+import { Screen } from '../components/Screen';
+import { Button, IconButton, Text } from '../components/ui';
+import { SettingsRow, SettingsSection } from '../components/features';
+
+export default function SettingsScreen() {
+  const router = useRouter();
+  const [notifications, setNotifications] = useState(true);
+  const [sound, setSound] = useState(true);
+  const [dark, setDark] = useState(false);
+
+  return (
+    <Screen scroll contentStyle={{ paddingBottom: 34 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <IconButton icon="chevron-left" label="Back" onPress={() => router.back()} />
+        <Text size={24} weight="bold">
+          Settings
+        </Text>
+      </View>
+
+      <SettingsSection title="Account">
+        <SettingsRow icon="pencil" label="Edit profile" onPress={() => {}} />
+        <SettingsRow icon="bell" label="Notifications" toggle={notifications} onToggle={setNotifications} last />
+      </SettingsSection>
+
+      <SettingsSection title="Preferences">
+        <SettingsRow icon="volume" label="Sound effects" toggle={sound} onToggle={setSound} />
+        <SettingsRow icon="moon" label="Dark mode" toggle={dark} onToggle={setDark} />
+        <SettingsRow icon="globe" label="Language" value="English" onPress={() => {}} last />
+      </SettingsSection>
+
+      <SettingsSection title="Support">
+        <SettingsRow icon="help" label="Help center" onPress={() => {}} />
+        <SettingsRow icon="shield" label="Privacy policy" onPress={() => {}} last />
+      </SettingsSection>
+
+      <Button label="Log out" variant="secondary" textColor={colors.error} onPress={() => router.replace('/welcome')} />
+    </Screen>
+  );
+}
+
+===== \Frontend\src\components\data\format.ts =====
+
+export const formatNumber = (n: number) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+export const formatTime = (totalSeconds: number) => {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+===== \Frontend\src\components\data\mock.ts =====
+
+import type { CategoryColor } from '../theme';
+import type { IconName } from '../components/ui/Icon';
+
+export const user = {
+  name: 'Alex Laurent',
+  firstName: 'Alex',
+  initials: 'AL',
+  handle: '@alex',
+  level: 12,
+  xp: 1240,
+  nextLevelXp: 1500,
+  streak: 7,
+  bestStreak: 14,
+  quizzes: 86,
+  accuracy: 82,
+};
+
+export type Tag = 'popular' | 'new' | 'trending';
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: IconName;
+  color: CategoryColor;
+  questions: number;
+  players: string;
+  tags: Tag[];
+}
+
+export const categories: Category[] = [
+  { id: 'science', name: 'Science', icon: 'flask', color: 'blue', questions: 312, players: '4.8k', tags: ['popular', 'trending'] },
+  { id: 'history', name: 'History', icon: 'landmark', color: 'orange', questions: 248, players: '3.1k', tags: ['popular'] },
+  { id: 'geography', name: 'Geography', icon: 'globe', color: 'green', questions: 275, players: '2.9k', tags: ['trending'] },
+  { id: 'movies', name: 'Movies', icon: 'film', color: 'pink', questions: 190, players: '3.6k', tags: ['popular', 'new'] },
+  { id: 'music', name: 'Music', icon: 'music', color: 'purple', questions: 164, players: '2.2k', tags: ['new'] },
+  { id: 'sports', name: 'Sports', icon: 'activity', color: 'teal', questions: 210, players: '2.7k', tags: ['trending'] },
+];
+
+export const getCategory = (id?: string) =>
+  categories.find((c) => c.id === id) ?? categories[0];
+
+export interface Question {
+  id: string;
+  text: string;
+  options: string[];
+  correctIndex: number;
+  explanation: string;
+}
+
+export const questionBank: Question[] = [
+  { id: 'q1', text: 'Which planet has the shortest orbital period around the Sun?', options: ['Mercury', 'Venus', 'Mars', 'Earth'], correctIndex: 0, explanation: 'Mercury completes an orbit in just 88 Earth days, the fastest of any planet in our solar system.' },
+  { id: 'q2', text: 'What is the chemical symbol for gold?', options: ['Ag', 'Au', 'Gd', 'Go'], correctIndex: 1, explanation: 'Au comes from the Latin word "aurum", meaning gold.' },
+  { id: 'q3', text: 'Which gas do plants absorb from the atmosphere for photosynthesis?', options: ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Hydrogen'], correctIndex: 2, explanation: 'Plants take in carbon dioxide and, using sunlight, convert it into glucose and oxygen.' },
+  { id: 'q4', text: 'How many bones are in the adult human body?', options: ['186', '206', '226', '246'], correctIndex: 1, explanation: 'Babies are born with around 300 bones that fuse together into 206 by adulthood.' },
+  { id: 'q5', text: 'What is the hardest natural substance on Earth?', options: ['Quartz', 'Steel', 'Diamond', 'Topaz'], correctIndex: 2, explanation: 'Diamond ranks 10 on the Mohs hardness scale, the highest of any natural material.' },
+  { id: 'q6', text: 'Which part of the cell contains genetic material?', options: ['Ribosome', 'Nucleus', 'Mitochondria', 'Membrane'], correctIndex: 1, explanation: 'The nucleus stores the cell’s DNA and controls its activities.' },
+  { id: 'q7', text: 'What is the speed of light in a vacuum (approx.)?', options: ['300,000 km/s', '150,000 km/s', '30,000 km/s', '3,000,000 km/s'], correctIndex: 0, explanation: 'Light travels at roughly 299,792 kilometres per second in a vacuum.' },
+  { id: 'q8', text: 'Which blood type is known as the universal donor?', options: ['A+', 'AB-', 'O-', 'B+'], correctIndex: 2, explanation: 'O negative red cells can be given to almost any patient in an emergency.' },
+  { id: 'q9', text: 'What force keeps planets in orbit around the Sun?', options: ['Magnetism', 'Friction', 'Gravity', 'Inertia'], correctIndex: 2, explanation: 'The Sun’s gravity constantly pulls planets toward it, bending their paths into orbits.' },
+  { id: 'q10', text: 'Which element has the atomic number 1?', options: ['Helium', 'Oxygen', 'Lithium', 'Hydrogen'], correctIndex: 3, explanation: 'Hydrogen is the lightest and most abundant element in the universe.' },
+  { id: 'q11', text: 'What is the largest organ of the human body?', options: ['Liver', 'Skin', 'Lungs', 'Brain'], correctIndex: 1, explanation: 'The skin covers around 2 square metres in an average adult.' },
+  { id: 'q12', text: 'Which planet is known as the Red Planet?', options: ['Jupiter', 'Mars', 'Saturn', 'Mercury'], correctIndex: 1, explanation: 'Iron oxide on its surface gives Mars its reddish colour.' },
+  { id: 'q13', text: 'What is the boiling point of water at sea level?', options: ['90 °C', '95 °C', '100 °C', '110 °C'], correctIndex: 2, explanation: 'Water boils at 100 °C (212 °F) at standard atmospheric pressure.' },
+  { id: 'q14', text: 'Who proposed the theory of general relativity?', options: ['Isaac Newton', 'Albert Einstein', 'Niels Bohr', 'Galileo Galilei'], correctIndex: 1, explanation: 'Einstein published general relativity in 1915, redefining our understanding of gravity.' },
+  { id: 'q15', text: 'Which vitamin is produced when skin is exposed to sunlight?', options: ['Vitamin A', 'Vitamin C', 'Vitamin D', 'Vitamin K'], correctIndex: 2, explanation: 'Sunlight triggers the skin to synthesise vitamin D.' },
+  { id: 'q16', text: 'What is the most abundant gas in Earth’s atmosphere?', options: ['Oxygen', 'Nitrogen', 'Argon', 'Carbon dioxide'], correctIndex: 1, explanation: 'Nitrogen makes up about 78% of the air we breathe.' },
+  { id: 'q17', text: 'How many chambers does the human heart have?', options: ['Two', 'Three', 'Four', 'Five'], correctIndex: 2, explanation: 'Two atria and two ventricles make up the four chambers.' },
+  { id: 'q18', text: 'What type of animal is a Komodo dragon?', options: ['Snake', 'Lizard', 'Crocodile', 'Salamander'], correctIndex: 1, explanation: 'The Komodo dragon is the largest living species of lizard.' },
+  { id: 'q19', text: 'Which scientist discovered penicillin?', options: ['Louis Pasteur', 'Marie Curie', 'Alexander Fleming', 'Joseph Lister'], correctIndex: 2, explanation: 'Alexander Fleming noticed mould killing bacteria in 1928.' },
+  { id: 'q20', text: 'What is the unit of electrical resistance?', options: ['Volt', 'Ohm', 'Watt', 'Ampere'], correctIndex: 1, explanation: 'The ohm (Ω) is named after physicist Georg Ohm.' },
+];
+
+export const getQuestions = (count: number) => questionBank.slice(0, Math.min(count, questionBank.length));
+
+export interface Achievement {
+  id: string;
+  label: string;
+  icon: IconName;
+  color?: CategoryColor;
+  locked?: boolean;
+}
+
+export const achievements: Achievement[] = [
+  { id: 'fire', label: 'On fire', icon: 'flame', color: 'orange' },
+  { id: 'perfect', label: 'Perfect', icon: 'target', color: 'purple' },
+  { id: 'speedy', label: 'Speedy', icon: 'zap', color: 'blue' },
+  { id: 'locked', label: 'Locked', icon: 'lock', locked: true },
+];
+
+export type Period = 'weekly' | 'monthly' | 'all';
+
+export interface Player {
+  rank: number;
+  name: string;
+  initials: string;
+  xp: number;
+  color: CategoryColor;
+  isMe?: boolean;
+}
+
+const weekly: Player[] = [
+  { rank: 1, name: 'Mia Johnson', initials: 'MJ', xp: 2860, color: 'pink' },
+  { rank: 2, name: 'Sam Kim', initials: 'SK', xp: 2540, color: 'purple' },
+  { rank: 3, name: 'Noah Bergeron', initials: 'NB', xp: 2310, color: 'teal' },
+  { rank: 4, name: 'Lea Tremblay', initials: 'LT', xp: 2120, color: 'orange' },
+  { rank: 5, name: 'Omar Haddad', initials: 'OH', xp: 1980, color: 'blue' },
+  { rank: 6, name: 'Chloé Roy', initials: 'CR', xp: 1760, color: 'green' },
+  { rank: 12, name: 'Alex Laurent (You)', initials: 'AL', xp: 1240, color: 'blue', isMe: true },
+];
+
+const multiplier: Record<Period, number> = { weekly: 1, monthly: 4, all: 15 };
+
+export const getLeaderboard = (period: Period): Player[] =>
+  weekly.map((p) => ({ ...p, xp: p.xp * multiplier[period] }));
+
+export const periods: { id: Period; label: string }[] = [
+  { id: 'weekly', label: 'Weekly' },
+  { id: 'monthly', label: 'Monthly' },
+  { id: 'all', label: 'All time' },
+];
+
+===== \Frontend\src\components\features\AchievementBadge.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors } from '../../theme';
+import type { Achievement } from '../data/mock';
+import { IconTile, Text } from '../ui';
+
+export function AchievementBadge({ item }: { item: Achievement }) {
+  const bg = item.locked || !item.color ? colors.surfaceAlt : colors.category[item.color].bg;
+  const fg = item.locked || !item.color ? colors.textFaint : colors.category[item.color].fg;
+
+  return (
+    <View style={{ flex: 1, alignItems: 'center', gap: 8 }}>
+      <IconTile icon={item.icon} bg={bg} color={fg} size={56} iconSize={26} radius={17} />
+      <Text size={12} weight="medium" color={colors.textMuted}>
+        {item.label}
+      </Text>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\features\CategoryCard.tsx =====
+
+import React from 'react';
+import { Pressable, View } from 'react-native';
+import { colors } from '../../theme';
+import type { Category } from '../data/mock';
+import { Card, IconTile, Text } from '../ui';
+
+interface Props {
+  category: Category;
+  variant?: 'compact' | 'large';
+  onPress?: () => void;
+}
+
+export function CategoryCard({ category, variant = 'compact', onPress }: Props) {
+  const c = colors.category[category.color];
+  const large = variant === 'large';
+
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" style={({ pressed }) => ({ flex: 1, opacity: pressed ? 0.85 : 1 })}>
+      {large ? (
+        <Card radius={20} style={{ padding: 16, gap: 12, height: 131 }}>
+          <IconTile icon={category.icon} bg={c.bg} color={c.fg} size={48} iconSize={26} radius={15} />
+          <View style={{ gap: 2 }}>
+            <Text size={16} weight="semibold" numberOfLines={1}>
+              {category.name}
+            </Text>
+            <Text size={13} color={colors.textMuted} numberOfLines={1}>
+              {category.questions} questions
+            </Text>
+          </View>
+        </Card>
+      ) : (
+        <Card style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
+          <IconTile icon={category.icon} bg={c.bg} color={c.fg} size={44} iconSize={24} radius={13} />
+          <View style={{ gap: 1, flexShrink: 1 }}>
+            <Text size={15} weight="semibold" numberOfLines={1}>
+              {category.name}
+            </Text>
+            <Text size={12} color={colors.textMuted} numberOfLines={1}>
+              {category.questions} questions
+            </Text>
+          </View>
+        </Card>
+      )}
+    </Pressable>
+  );
+}
+
+===== \Frontend\src\components\features\DailyChallengeCard.tsx =====
+
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import { colors, radii } from '../../theme';
+import { Button, Text } from '../ui';
+
+export function DailyChallengeCard({ onPlay }: { onPlay: () => void }) {
+  return (
+    <View style={styles.card}>
+      <View style={[styles.decor, { left: 190, top: -70, width: 190, height: 190, opacity: 0.1 }]} />
+      <View style={[styles.decor, { left: 250, top: 60, width: 110, height: 110, opacity: 0.08 }]} />
+
+      <View style={styles.pill}>
+        <Text size={11} weight="semibold" color={colors.primary} letterSpacing={0.4}>
+          DAILY CHALLENGE
+        </Text>
+      </View>
+      <Text size={24} weight="bold" color={colors.onPrimary}>
+        Today’s mixed quiz
+      </Text>
+      <Text size={14} color={colors.onPrimary} style={{ opacity: 0.85 }}>
+        10 questions · Earn 2× XP · about 3 min
+      </Text>
+      <Button label="Play now" variant="secondary" textColor={colors.primary} onPress={onPlay} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: colors.primary,
+    borderRadius: radii.xxl,
+    padding: 20,
+    gap: 12,
+    overflow: 'hidden',
+  },
+  decor: {
+    position: 'absolute',
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+  },
+  pill: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.onPrimary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radii.pill,
+  },
+});
+
+===== \Frontend\src\components\features\FeedbackSheet.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors } from '../../theme';
+import { Button, Icon, Text } from '../ui';
+
+export type Verdict = 'correct' | 'wrong' | 'timeout';
+
+interface Props {
+  verdict: Verdict;
+  answer: string;
+  explanation: string;
+  isLast: boolean;
+  onNext: () => void;
+}
+
+export function FeedbackSheet({ verdict, answer, explanation, isLast, onNext }: Props) {
+  const insets = useSafeAreaInsets();
+  const ok = verdict === 'correct';
+  const tone = ok ? colors.success : colors.error;
+  const title = ok ? 'Correct! Nice work' : verdict === 'timeout' ? `Time’s up — the answer is ${answer}` : `Not quite — the answer is ${answer}`;
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surface,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        paddingTop: 24,
+        paddingHorizontal: 20,
+        paddingBottom: Math.max(insets.bottom, 20) + 14,
+        gap: 12,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 18,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: ok ? colors.successSoft : colors.errorSoft,
+          }}
+        >
+          <Icon name={ok ? 'check' : 'x'} size={18} color={tone} />
+        </View>
+        <Text size={18} weight="bold" color={tone} style={{ flex: 1 }}>
+          {title}
+        </Text>
+      </View>
+      <Text size={15} lineHeight={22} color={colors.textMuted}>
+        {explanation}
+      </Text>
+      <Button label={isLast ? 'See results' : 'Next question'} onPress={onNext} />
+    </View>
+  );
+}
+
+===== \Frontend\src\components\features\index.ts =====
+
+export * from './AchievementBadge';
+export * from './CategoryCard';
+export * from './DailyChallengeCard';
+export * from './FeedbackSheet';
+export * from './PodiumItem';
+export * from './QuizTopBar';
+export * from './RankingRow';
+export * from './SettingsRow';
+export * from './SettingsSection';
+export * from './StatCard';
+export * from './WelcomeIllustration';
+
+===== \Frontend\src\components\features\PodiumItem.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors } from '../../theme';
+import type { Player } from '../data/mock';
+import { formatNumber } from '../../data/format';
+import { Avatar, Text } from '../ui';
+
+const barHeight: Record<number, number> = { 1: 88, 2: 64, 3: 48 };
+
+export function PodiumItem({ player }: { player: Player }) {
+  const first = player.rank === 1;
+  const c = colors.category[player.color];
+
+  return (
+    <View style={{ flex: 1, alignItems: 'center', gap: 4 }}>
+      <Avatar initials={player.initials} size={first ? 64 : 52} bg={c.bg} fg={c.fg} fontSize={first ? 20 : 16} />
+      <Text size={14} weight="semibold" numberOfLines={1}>
+        {player.name}
+      </Text>
+      <Text size={12} color={colors.textMuted}>
+        {formatNumber(player.xp)} XP
+      </Text>
+      <View
+        style={{
+          width: '100%',
+          height: barHeight[player.rank],
+          marginTop: 4,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderTopLeftRadius: 14,
+          borderTopRightRadius: 14,
+          backgroundColor: first ? colors.primary : colors.primarySoft,
+        }}
+      >
+        <Text size={22} weight="bold" color={first ? colors.onPrimary : colors.primary}>
+          {player.rank}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\features\QuizTopBar.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors } from '../../theme';
+import { IconButton, Text, TimerPill } from '../ui';
+
+interface Props {
+  title: string;
+  onClose: () => void;
+  timer?: string | null;
+}
+
+export function QuizTopBar({ title, onClose, timer }: Props) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <IconButton icon="x" label="Close" onPress={onClose} />
+      <Text size={15} weight="semibold" color={colors.textMuted}>
+        {title}
+      </Text>
+      {timer ? <TimerPill label={timer} /> : <View style={{ width: 44 }} />}
+    </View>
+  );
+}
+
+===== \Frontend\src\components\features\RankingRow.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors } from '../../theme';
+import type { Player } from '../data/mock';
+import { formatNumber } from '../../data/format';
+import { Avatar, Text } from '../ui';
+
+export function RankingRow({ player }: { player: Player }) {
+  const c = colors.category[player.color];
+  const me = !!player.isMe;
+
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 14,
+        backgroundColor: me ? colors.primarySoft : 'transparent',
+      }}
+    >
+      <Text size={15} weight="semibold" color={me ? colors.primary : colors.textMuted} style={{ width: 22 }}>
+        {player.rank}
+      </Text>
+      <Avatar
+        initials={player.initials}
+        size={40}
+        bg={me ? colors.primary : c.bg}
+        fg={me ? colors.onPrimary : c.fg}
+        fontSize={14}
+      />
+      <Text size={15} weight="semibold" numberOfLines={1} style={{ flex: 1 }}>
+        {player.name}
+      </Text>
+      <Text size={14} weight="semibold" color={me ? colors.primary : colors.text}>
+        {formatNumber(player.xp)} XP
+      </Text>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\features\SettingsRow.tsx =====
+
+import React from 'react';
+import { Pressable, View } from 'react-native';
+import { colors } from '../../theme';
+import { Icon, IconName, IconTile, Text, Toggle } from '../ui';
+
+interface Props {
+  icon: IconName;
+  label: string;
+  value?: string;
+  toggle?: boolean;
+  onToggle?: (v: boolean) => void;
+  onPress?: () => void;
+  last?: boolean;
+}
+
+export function SettingsRow({ icon, label, value, toggle, onToggle, onPress, last }: Props) {
+  const isToggle = toggle !== undefined;
+
+  return (
+    <View>
+      <Pressable
+        disabled={isToggle || !onPress}
+        onPress={onPress}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 10 }}
+      >
+        <IconTile icon={icon} bg={colors.primarySoft} color={colors.primary} size={36} iconSize={18} radius={11} />
+        <Text size={16} weight="medium" style={{ flex: 1 }}>
+          {label}
+        </Text>
+        {isToggle ? (
+          <Toggle value={toggle!} onValueChange={(v) => onToggle?.(v)} />
+        ) : (
+          <>
+            {value ? (
+              <Text size={14} color={colors.textMuted}>
+                {value}
+              </Text>
+            ) : null}
+            <Icon name="chevron-right" size={20} color={colors.textFaint} />
+          </>
+        )}
+      </Pressable>
+      {!last && <View style={{ height: 1, backgroundColor: colors.border }} />}
+    </View>
+  );
+}
+
+===== \Frontend\src\components\features\SettingsSection.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors } from '../../theme';
+import { Card, Text } from '../ui';
+
+export function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ gap: 8 }}>
+      <Text size={12} weight="semibold" color={colors.textFaint} letterSpacing={0.5}>
+        {title.toUpperCase()}
+      </Text>
+      <Card radius={20} style={{ paddingHorizontal: 16 }}>
+        {children}
+      </Card>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\features\StatCard.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors } from '../../theme';
+import { Card, IconName, IconTile, Text } from '../ui';
+
+interface Props {
+  icon: IconName;
+  bg: string;
+  color: string;
+  value: string;
+  label: string;
+}
+
+export function StatCard({ icon, bg, color, value, label }: Props) {
+  return (
+    <Card style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }}>
+      <IconTile icon={icon} bg={bg} color={color} size={40} iconSize={20} radius={12} />
+      <View style={{ gap: 1, flexShrink: 1 }}>
+        <Text size={17} weight="semibold" numberOfLines={1}>
+          {value}
+        </Text>
+        <Text size={12} color={colors.textMuted} numberOfLines={1}>
+          {label}
+        </Text>
+      </View>
+    </Card>
+  );
+}
+
+===== \Frontend\src\components\features\WelcomeIllustration.tsx =====
+
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import { colors, radii, shadows } from '../../theme';
+import { Icon, IconName, Text } from '../ui';
+
+const floating: { icon: IconName; bg: string; fg: string; left: number; top: number; rotate: string }[] = [
+  { icon: 'flask', bg: colors.category.blue.bg, fg: colors.category.blue.fg, left: 24, top: 49, rotate: '10deg' },
+  { icon: 'trophy', bg: colors.category.orange.bg, fg: colors.category.orange.fg, left: 261, top: 65, rotate: '-9deg' },
+  { icon: 'globe', bg: colors.category.green.bg, fg: colors.category.green.fg, left: 62, top: 260, rotate: '-7deg' },
+  { icon: 'zap', bg: colors.category.purple.bg, fg: colors.category.purple.fg, left: 231, top: 282, rotate: '8deg' },
+];
+
+export function WelcomeIllustration() {
+  return (
+    <View style={styles.wrap}>
+      <View style={[styles.decor, { left: -80, top: -90, width: 300, height: 300, opacity: 0.1 }]} />
+      <View style={[styles.decor, { left: 170, top: 230, width: 240, height: 240, opacity: 0.08 }]} />
+      <View style={[styles.decor, { left: 230, top: -30, width: 120, height: 120, opacity: 0.12 }]} />
+
+      <View style={styles.questionWrap} pointerEvents="none">
+        <Text size={190} weight="bold" color={colors.onPrimary} style={{ lineHeight: 230 }}>
+          ?
+        </Text>
+      </View>
+
+      {floating.map((f) => (
+        <View
+          key={f.icon}
+          style={[
+            styles.card,
+            shadows.floating,
+            { left: f.left, top: f.top, backgroundColor: f.bg, transform: [{ rotate: f.rotate }] },
+          ]}
+        >
+          <Icon name={f.icon} size={32} color={f.fg} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: {
+    height: 380,
+    width: '100%',
+    borderRadius: radii.hero,
+    backgroundColor: colors.primary,
+    overflow: 'hidden',
+  },
+  decor: { position: 'absolute', borderRadius: 999, backgroundColor: '#FFFFFF' },
+  questionWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  card: {
+    position: 'absolute',
+    padding: 16,
+    borderRadius: 20,
+  },
+});
+
+===== \Frontend\src\components\ui\Avatar.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { Text } from './Text';
+
+interface Props {
+  initials: string;
+  size?: number;
+  bg: string;
+  fg: string;
+  fontSize?: number;
+}
+
+export function Avatar({ initials, size = 44, bg, fg, fontSize }: Props) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Text size={fontSize ?? Math.round(size * 0.34)} weight="semibold" color={fg}>
+        {initials}
+      </Text>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\Button.tsx =====
+
+import React from 'react';
+import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { colors, radii } from '../../theme';
+import { Text } from './Text';
+
+export type ButtonVariant = 'primary' | 'secondary' | 'soft' | 'ghost';
+
+interface Props {
+  label: string;
+  onPress?: () => void;
+  variant?: ButtonVariant;
+  disabled?: boolean;
+  textColor?: string;
+  style?: StyleProp<ViewStyle>;
+}
+
+const variants = {
+  primary: { bg: colors.primary, fg: colors.onPrimary, border: false },
+  secondary: { bg: colors.surface, fg: colors.text, border: true },
+  soft: { bg: colors.primarySoft, fg: colors.primary, border: false },
+  ghost: { bg: 'transparent', fg: colors.primary, border: false },
+} as const;
+
+export function Button({ label, onPress, variant = 'primary', disabled, textColor, style }: Props) {
+  const v = variants[variant];
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.base,
+        {
+          backgroundColor: v.bg,
+          borderWidth: v.border ? 1 : 0,
+          borderColor: colors.border,
+          opacity: disabled ? 0.5 : pressed ? 0.85 : 1,
+        },
+        style,
+      ]}
+    >
+      <Text size={16} weight="semibold" color={textColor ?? v.fg}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  base: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderRadius: radii.md,
+  },
+});
+
+===== \Frontend\src\components\ui\Card.tsx =====
+
+import React from 'react';
+import { StyleProp, View, ViewStyle } from 'react-native';
+import { colors } from '../../theme';
+
+interface Props {
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+  children?: React.ReactNode;
+}
+
+export function Card({ radius = 18, style, children }: Props) {
+  return (
+    <View
+      style={[
+        {
+          backgroundColor: colors.surface,
+          borderWidth: 1,
+          borderColor: colors.border,
+          borderRadius: radius,
+        },
+        style,
+      ]}
+    >
+      {children}
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\CategoryTag.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors, CategoryColor, radii } from '../../theme';
+import { Icon, IconName } from './Icon';
+import { Text } from './Text';
+
+interface Props {
+  icon: IconName;
+  label: string;
+  color: CategoryColor;
+}
+
+export function CategoryTag({ icon, label, color }: Props) {
+  const c = colors.category[color];
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: radii.pill,
+        backgroundColor: c.bg,
+      }}
+    >
+      <Icon name={icon} size={14} color={c.fg} />
+      <Text size={13} weight="medium" color={c.fg}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\Chip.tsx =====
+
+import React from 'react';
+import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
+import { colors, radii } from '../../theme';
+import { Text } from './Text';
+
+interface Props {
+  label: string;
+  active?: boolean;
+  onPress?: () => void;
+  style?: StyleProp<ViewStyle>;
+}
+
+export function Chip({ label, active, onPress, style }: Props) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected: !!active }}
+      onPress={onPress}
+      style={[
+        styles.base,
+        active
+          ? { backgroundColor: colors.primary, borderColor: colors.primary }
+          : { backgroundColor: colors.surface, borderColor: colors.border },
+        style,
+      ]}
+    >
+      <Text size={14} weight="medium" color={active ? colors.onPrimary : colors.textMuted}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  base: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+  },
+});
+
+===== \Frontend\src\components\ui\Icon.tsx =====
+
+import React from 'react';
+import {
+  Activity, Bell, Check, ChevronLeft, ChevronRight, CircleHelp, Clock, Film, Flame,
+  FlaskConical, Globe, House, Landmark, Lock, Moon, Music, Pencil, Search, Settings,
+  Shield, Target, Trophy, User, Volume2, X, Zap,
+} from 'lucide-react-native';
+import { colors } from '../../theme';
+
+export const icons = {
+  activity: Activity,
+  bell: Bell,
+  check: Check,
+  'chevron-left': ChevronLeft,
+  'chevron-right': ChevronRight,
+  help: CircleHelp,
+  clock: Clock,
+  film: Film,
+  flame: Flame,
+  flask: FlaskConical,
+  globe: Globe,
+  home: House,
+  landmark: Landmark,
+  lock: Lock,
+  moon: Moon,
+  music: Music,
+  pencil: Pencil,
+  search: Search,
+  settings: Settings,
+  shield: Shield,
+  target: Target,
+  trophy: Trophy,
+  user: User,
+  volume: Volume2,
+  x: X,
+  zap: Zap,
+} as const;
+
+export type IconName = keyof typeof icons;
+
+interface Props {
+  name: IconName;
+  size?: number;
+  color?: string;
+  strokeWidth?: number;
+}
+
+export function Icon({ name, size = 20, color = colors.text, strokeWidth = 2 }: Props) {
+  const Cmp = icons[name];
+  return <Cmp size={size} color={color} strokeWidth={strokeWidth} />;
+}
+
+===== \Frontend\src\components\ui\IconButton.tsx =====
+
+import React from 'react';
+import { Pressable, StyleSheet } from 'react-native';
+import { colors } from '../../theme';
+import { Icon, IconName } from './Icon';
+
+interface Props {
+  icon: IconName;
+  onPress?: () => void;
+  label?: string;
+}
+
+export function IconButton({ icon, onPress, label }: Props) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label ?? icon}
+      onPress={onPress}
+      style={({ pressed }) => [styles.base, pressed && { opacity: 0.7 }]}
+    >
+      <Icon name={icon} size={22} color={colors.text} />
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  base: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+});
+
+===== \Frontend\src\components\ui\IconTile.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { Icon, IconName } from './Icon';
+
+interface Props {
+  icon: IconName;
+  bg: string;
+  color: string;
+  size?: number;
+  iconSize?: number;
+  radius?: number;
+}
+
+export function IconTile({ icon, bg, color, size = 44, iconSize = 24, radius = 13 }: Props) {
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: radius,
+        backgroundColor: bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Icon name={icon} size={iconSize} color={color} />
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\index.ts =====
+
+export * from './Avatar';
+export * from './Button';
+export * from './Card';
+export * from './CategoryTag';
+export * from './Chip';
+export * from './Icon';
+export * from './IconButton';
+export * from './IconTile';
+export * from './Input';
+export * from './OptionCard';
+export * from './ProgressBar';
+export * from './ScoreRing';
+export * from './SectionHeader';
+export * from './SegmentedControl';
+export * from './Text';
+export * from './TimerPill';
+export * from './Toggle';
+
+===== \Frontend\src\components\ui\Input.tsx =====
+
+import React, { useState } from 'react';
+import { StyleSheet, TextInput, TextInputProps, View } from 'react-native';
+import { colors, fonts } from '../../theme';
+import { Text } from './Text';
+
+interface Props extends TextInputProps {
+  label: string;
+}
+
+export function Input({ label, onFocus, onBlur, style, ...rest }: Props) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={styles.wrap}>
+      <Text size={13} weight="medium" color={colors.textMuted}>
+        {label}
+      </Text>
+      <TextInput
+        placeholderTextColor={colors.textFaint}
+        autoCapitalize="none"
+        {...rest}
+        onFocus={(e) => {
+          setFocused(true);
+          onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          onBlur?.(e);
+        }}
+        style={[styles.field, { borderColor: focused ? colors.primary : colors.border }, style]}
+      />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  wrap: { gap: 8, width: '100%' },
+  field: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+    fontFamily: fonts.regular,
+    fontSize: 15,
+    color: colors.text,
+  },
+});
+
+===== \Frontend\src\components\ui\OptionCard.tsx =====
+
+import React from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { colors, radii } from '../../theme';
+import { Icon } from './Icon';
+import { Text } from './Text';
+
+export type OptionState = 'default' | 'selected' | 'correct' | 'wrong';
+
+interface Props {
+  letter: string;
+  label: string;
+  state?: OptionState;
+  disabled?: boolean;
+  dimmed?: boolean;
+  onPress?: () => void;
+}
+
+const tones = {
+  default: { bg: colors.surface, border: colors.border, width: 1, badgeBg: colors.surfaceAlt, badgeFg: colors.textMuted },
+  selected: { bg: colors.primarySoft, border: colors.primary, width: 2, badgeBg: colors.primary, badgeFg: colors.onPrimary },
+  correct: { bg: colors.successSoft, border: colors.success, width: 2, badgeBg: colors.success, badgeFg: colors.onPrimary },
+  wrong: { bg: colors.errorSoft, border: colors.error, width: 2, badgeBg: colors.error, badgeFg: colors.onPrimary },
+} as const;
+
+export function OptionCard({ letter, label, state = 'default', disabled, dimmed, onPress }: Props) {
+  const t = tones[state];
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.base,
+        {
+          backgroundColor: t.bg,
+          borderColor: t.border,
+          borderWidth: t.width,
+          opacity: dimmed ? 0.4 : pressed ? 0.9 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.badge, { backgroundColor: t.badgeBg }]}>
+        <Text size={14} weight="semibold" color={t.badgeFg}>
+          {letter}
+        </Text>
+      </View>
+      <Text size={16} weight="medium" style={styles.label}>
+        {label}
+      </Text>
+      {state === 'correct' && <Icon name="check" size={22} color={colors.success} />}
+      {state === 'wrong' && <Icon name="x" size={22} color={colors.error} />}
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: radii.md,
+  },
+  badge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  label: { flex: 1 },
+});
+
+===== \Frontend\src\components\ui\ProgressBar.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors, radii } from '../../theme';
+
+export function ProgressBar({ progress }: { progress: number }) {
+  const pct = Math.max(0, Math.min(1, progress)) * 100;
+  return (
+    <View
+      style={{
+        height: 8,
+        width: '100%',
+        borderRadius: radii.pill,
+        backgroundColor: colors.surfaceAlt,
+        overflow: 'hidden',
+      }}
+    >
+      <View
+        style={{
+          width: `${pct}%`,
+          height: 8,
+          borderRadius: radii.pill,
+          backgroundColor: colors.primary,
+        }}
+      />
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\ScoreRing.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
+import { colors } from '../../theme';
+import { Text } from './Text';
+
+interface Props {
+  score: number;
+  total: number;
+  size?: number;
+  stroke?: number;
+}
+
+export function ScoreRing({ score, total, size = 200, stroke = 14 }: Props) {
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const progress = total > 0 ? score / total : 0;
+  const cx = size / 2;
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Circle cx={cx} cy={cx} r={r} stroke={colors.surfaceAlt} strokeWidth={stroke} fill="none" />
+        <Circle
+          cx={cx}
+          cy={cx}
+          r={r}
+          stroke={colors.primary}
+          strokeWidth={stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={`${c} ${c}`}
+          strokeDashoffset={c * (1 - progress)}
+          rotation={-90}
+          origin={`${cx}, ${cx}`}
+        />
+      </Svg>
+      <Text size={48} weight="bold">
+        {score}/{total}
+      </Text>
+      <Text size={13} weight="medium" color={colors.textMuted}>
+        Correct answers
+      </Text>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\SectionHeader.tsx =====
+
+import React from 'react';
+import { Pressable, View } from 'react-native';
+import { colors } from '../../theme';
+import { Text } from './Text';
+
+interface Props {
+  title: string;
+  actionLabel?: string;
+  onActionPress?: () => void;
+}
+
+export function SectionHeader({ title, actionLabel, onActionPress }: Props) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <Text size={18} weight="semibold">
+        {title}
+      </Text>
+      {actionLabel ? (
+        <Pressable onPress={onActionPress} hitSlop={8}>
+          <Text size={14} weight="medium" color={colors.primary}>
+            {actionLabel}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\SegmentedControl.tsx =====
+
+import React from 'react';
+import { Pressable, View } from 'react-native';
+import { colors } from '../../theme';
+import { Text } from './Text';
+
+interface Props<T extends string> {
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (id: T) => void;
+}
+
+export function SegmentedControl<T extends string>({ options, value, onChange }: Props<T>) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        gap: 4,
+        padding: 4,
+        borderRadius: 14,
+        backgroundColor: colors.surfaceAlt,
+      }}
+    >
+      {options.map((o) => {
+        const active = o.id === value;
+        return (
+          <Pressable
+            key={o.id}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            onPress={() => onChange(o.id)}
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              paddingVertical: 10,
+              borderRadius: 10,
+              backgroundColor: active ? colors.surface : 'transparent',
+            }}
+          >
+            <Text size={14} weight={active ? 'semibold' : 'medium'} color={active ? colors.text : colors.textMuted}>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\Text.tsx =====
+
+import React from 'react';
+import { Text as RNText, TextProps, TextStyle } from 'react-native';
+import { colors, fonts, FontWeight } from '../../theme';
+
+interface Props extends TextProps {
+  size?: number;
+  weight?: FontWeight;
+  color?: string;
+  lineHeight?: number;
+  align?: TextStyle['textAlign'];
+  letterSpacing?: number;
+}
+
+export function Text({
+  size = 16,
+  weight = 'regular',
+  color = colors.text,
+  lineHeight,
+  align,
+  letterSpacing,
+  style,
+  ...rest
+}: Props) {
+  return (
+    <RNText
+      {...rest}
+      style={[
+        {
+          fontFamily: fonts[weight],
+          fontSize: size,
+          color,
+          lineHeight,
+          textAlign: align,
+          letterSpacing,
+          includeFontPadding: false,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+===== \Frontend\src\components\ui\TimerPill.tsx =====
+
+import React from 'react';
+import { View } from 'react-native';
+import { colors, radii } from '../../theme';
+import { Icon } from './Icon';
+import { Text } from './Text';
+
+export function TimerPill({ label }: { label: string }) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: radii.pill,
+        backgroundColor: colors.warningSoft,
+      }}
+    >
+      <Icon name="clock" size={16} color={colors.warning} />
+      <Text size={14} weight="semibold" color={colors.warning}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+===== \Frontend\src\components\ui\Toggle.tsx =====
+
+import React, { useEffect, useRef } from 'react';
+import { Animated, Pressable } from 'react-native';
+import { colors } from '../../theme';
+
+interface Props {
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+}
+
+export function Toggle({ value, onValueChange }: Props) {
+  const x = useRef(new Animated.Value(value ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(x, { toValue: value ? 1 : 0, duration: 160, useNativeDriver: false }).start();
+  }, [value, x]);
+
+  const bg = x.interpolate({ inputRange: [0, 1], outputRange: [colors.border, colors.primary] });
+  const left = x.interpolate({ inputRange: [0, 1], outputRange: [2, 22] });
+
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value }}
+      onPress={() => onValueChange(!value)}
+      hitSlop={8}
+    >
+      <Animated.View style={{ width: 46, height: 26, borderRadius: 13, backgroundColor: bg }}>
+        <Animated.View
+          style={{
+            position: 'absolute',
+            top: 2,
+            left,
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            backgroundColor: colors.onPrimary,
+          }}
+        />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+===== \Frontend\src\components\Screen.tsx =====
+
+import React from 'react';
+import { ScrollView, StyleProp, View, ViewStyle } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors } from '../theme';
+
+interface Props {
+  children: React.ReactNode;
+  scroll?: boolean;
+  contentStyle?: StyleProp<ViewStyle>;
+}
+
+export function Screen({ children, scroll = false, contentStyle }: Props) {
+  return (
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
+      {scroll ? (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={[{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, gap: 20 }, contentStyle]}
+        >
+          {children}
+        </ScrollView>
+      ) : (
+        <View style={[{ flex: 1, paddingHorizontal: 20, paddingTop: 8 }, contentStyle]}>{children}</View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+===== \Frontend\src\components\TabBar.tsx =====
+
+import React from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { colors } from '../theme';
+import { Icon, IconName, Text } from './ui';
+
+const tabs: Record<string, { label: string; icon: IconName }> = {
+  home: { label: 'Home', icon: 'home' },
+  explore: { label: 'Explore', icon: 'search' },
+  ranking: { label: 'Ranking', icon: 'trophy' },
+  profile: { label: 'Profile', icon: 'user' },
+};
+
+export function TabBar({ state, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      {state.routes.map((route, index) => {
+        const cfg = tabs[route.name];
+        if (!cfg) return null;
+        const focused = state.index === index;
+        const color = focused ? colors.primary : colors.textFaint;
+
+        const onPress = () => {
+          const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+          if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
+        };
+
+        return (
+          <Pressable
+            key={route.key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: focused }}
+            onPress={onPress}
+            style={styles.tab}
+          >
+            <Icon name={cfg.icon} size={24} color={color} />
+            <Text size={11} weight={focused ? 'semibold' : 'medium'} color={color}>
+              {cfg.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  bar: {
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    paddingHorizontal: 12,
+  },
+  tab: { flex: 1, alignItems: 'center', gap: 4 },
+});
+
+===== \Frontend\src\hooks\useCountdown.ts =====
+
+import { useEffect, useState } from 'react';
+
+export function useCountdown(seconds: number | null, running: boolean, resetKey: unknown, onEnd: () => void) {
+  const [left, setLeft] = useState(seconds ?? 0);
+
+  useEffect(() => {
+    setLeft(seconds ?? 0);
+  }, [seconds, resetKey]);
+
+  useEffect(() => {
+    if (seconds === null || !running) return;
+    const id = setInterval(() => {
+      setLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(id);
+          onEnd();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seconds, running, resetKey]);
+
+  return left;
+}
+
+===== \Frontend\src\lib\api.ts =====
+
+
+const API_BASE_URL = (
+  process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:4000/api"
+).replace(/\/+$/, "");
+
+export interface QuizCategory {
+  id: number;
+  name: string;
+}
+
+export interface QuizQuestion {
+  category: string;
+  difficulty: "easy" | "medium" | "hard";
+  type: "multiple" | "boolean";
+  question: string;
+  answers: string[];
+}
+
+export interface QuizSession {
+  quizId: string;
+  totalQuestions: number;
+  question: QuizQuestion | null;
+}
+
+export interface QuizResult {
+  correct: boolean;
+  correctAnswer: string;
+  score: number;
+  totalQuestions?: number;
+  finished?: boolean;
+  nextQuestion?: QuizQuestion | null;
+}
+
+export interface CreateQuizOptions {
+  amount: number;
+  categoryId?: number;
+  difficulty?: "easy" | "medium" | "hard";
+  type?: "multiple" | "boolean";
+  playerName: string;
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+  } catch {
+    throw new Error(
+      `Impossible de joindre le serveur (${API_BASE_URL}). Vérifie que le backend est démarré et que son adresse est correcte.`,
+    );
+  }
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.error === "string"
+        ? data.error
+        : `Erreur API HTTP ${response.status}`,
+    );
+  }
+
+  return data as T;
+}
+
+export const api = {
+  health: () =>
+    request<{ status: string; service: string }>("/health"),
+
+  getCategories: () =>
+    request<QuizCategory[]>("/categories"),
+
+  createQuiz: (options: CreateQuizOptions) =>
+    request<QuizSession>("/quizzes", {
+      method: "POST",
+      body: JSON.stringify(options),
+    }),
+
+  getQuiz: (quizId: string) =>
+    request<QuizSession & { score: number; finished: boolean }>(
+      `/quizzes/${encodeURIComponent(quizId)}`,
+    ),
+
+  submitAnswer: (quizId: string, answer: string) =>
+    request<QuizResult>(
+      `/quizzes/${encodeURIComponent(quizId)}/answers`,
+      {
+        method: "POST",
+        body: JSON.stringify({ answer }),
+      },
+    ),
+
+  getResults: (quizId: string) =>
+    request<QuizResult>(
+      `/quizzes/${encodeURIComponent(quizId)}/results`,
+    ),
+
+  getLeaderboard: () =>
+    request<Array<{
+      playerName: string;
+      score: number;
+      totalQuestions: number;
+    }>>("/leaderboard"),
+};
+
+===== \Frontend\src\theme\colors.ts =====
+
+export const colors = {
+  bg: '#F5F6FA',
+  surface: '#FFFFFF',
+  surfaceAlt: '#ECEEF5',
+  border: '#E2E5EF',
+
+  text: '#10121C',
+  textMuted: '#61687D',
+  textFaint: '#9AA1B5',
+
+  primary: '#5B4DF5',
+  primarySoft: '#ECEAFE',
+  onPrimary: '#FFFFFF',
+
+  success: '#16A367',
+  successSoft: '#E3F6ED',
+  error: '#E5484D',
+  errorSoft: '#FDEBEC',
+  warning: '#D98206',
+  warningSoft: '#FEF1D6',
+
+  category: {
+    blue: { fg: '#2F6BFF', bg: '#E5EEFF' },
+    orange: { fg: '#F07A1A', bg: '#FFEBDA' },
+    green: { fg: '#16A367', bg: '#E3F6ED' },
+    pink: { fg: '#E5439B', bg: '#FDE6F2' },
+    purple: { fg: '#8B5CF6', bg: '#EFE8FE' },
+    teal: { fg: '#0E9AA7', bg: '#DDF4F6' },
+  },
+} as const;
+
+export type CategoryColor = keyof typeof colors.category;
+
+===== \Frontend\src\theme\index.ts =====
+
+export * from './colors';
+export * from './typography';
+
+export const radii = {
+  pill: 999,
+  sm: 14,
+  md: 16,
+  lg: 18,
+  xl: 20,
+  xxl: 24,
+  hero: 32,
+} as const;
+
+export const shadows = {
+  floating: {
+    shadowColor: '#14124D',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+} as const;
+
+===== \Frontend\src\theme\typography.ts =====
+
+export const fonts = {
+  regular: 'Inter_400Regular',
+  medium: 'Inter_500Medium',
+  semibold: 'Inter_600SemiBold',
+  bold: 'Inter_700Bold',
+} as const;
+
+export type FontWeight = keyof typeof fonts;
+
+===== \Frontend\app.json =====
+
+{
+  "expo": {
+    "name": "TriviaApp",
+    "slug": "trivia-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "triviaapp",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/expo.icon"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "server",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ],
+      "expo-font",
+      "expo-image",
+      "expo-status-bar",
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
+
+===== \Frontend\package.json =====
+
+{
+  "name": "roamapp",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
+  "dependencies": {
+    "@expo-google-fonts/inter": "^0.4.2",
+    "@expo/ui": "~57.0.25",
+    "expo": "~57.0.30",
+    "expo-constants": "~57.0.22",
+    "expo-device": "~57.0.2",
+    "expo-font": "~57.0.4",
+    "expo-glass-effect": "~57.0.4",
+    "expo-image": "~57.0.5",
+    "expo-linking": "~57.0.13",
+    "expo-router": "~57.0.28",
+    "expo-splash-screen": "~57.0.10",
+    "expo-status-bar": "~57.0.1",
+    "expo-symbols": "~57.0.3",
+    "expo-system-ui": "~57.0.4",
+    "expo-web-browser": "~57.0.3",
+    "lucide-react-native": "^1.58.0",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-gesture-handler": "~2.32.0",
+    "react-native-reanimated": "4.5.1",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
+    "react-native-web": "~0.21.4",
+    "react-native-worklets": "0.10.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.4",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "reset-project": "node ./scripts/reset-project.js",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "lint": "expo lint"
+  },
+  "private": true
+}
+
+===== \Frontend\tsconfig.json =====
+
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@/assets/*": [
+        "./assets/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
+}

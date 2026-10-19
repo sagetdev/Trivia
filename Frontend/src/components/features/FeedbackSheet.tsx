@@ -9,7 +9,7 @@ export type Verdict = 'correct' | 'wrong' | 'timeout';
 interface Props {
   verdict: Verdict;
   answer: string;
-  explanation: string;
+  explanation?: string;
   isLast: boolean;
   onNext: () => void;
 }
@@ -51,9 +51,11 @@ export function FeedbackSheet({ verdict, answer, explanation, isLast, onNext }: 
           {title}
         </Text>
       </View>
-      <Text size={15} lineHeight={22} color={colors.textMuted}>
-        {explanation}
-      </Text>
+      {explanation ? (
+        <Text size={15} lineHeight={22} color={colors.textMuted}>
+          {explanation}
+        </Text>
+      ) : null}
       <Button label={isLast ? 'See results' : 'Next question'} onPress={onNext} />
     </View>
   );

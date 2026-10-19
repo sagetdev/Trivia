@@ -3,15 +3,15 @@ const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ?? "http://10.0.2.2:4000/api"
 ).replace(/\/+$/, "");
 
-export interface QuizCategory {
-  id: number;
-  name: string;
-}
+export type Difficulty = "easy" | "medium" | "hard";
+export type QuestionType = "multiple" | "boolean";
+
+export interface QuizCategory { id: number; name: string }
 
 export interface QuizQuestion {
   category: string;
-  difficulty: "easy" | "medium" | "hard";
-  type: "multiple" | "boolean";
+  difficulty: Difficulty;
+  type: QuestionType;
   question: string;
   answers: string[];
 }
@@ -22,21 +22,33 @@ export interface QuizSession {
   question: QuizQuestion | null;
 }
 
-export interface QuizResult {
-  correct: boolean;
-  correctAnswer: string;
+export interface QuizSummary {
+  quizId: string;
+  playerName: string;
   score: number;
-  totalQuestions?: number;
-  finished?: boolean;
-  nextQuestion?: QuizQuestion | null;
+  total: number;
+  finishedAt: string;
 }
 
+export interface AnswerResult {
+  isCorrect: boolean;
+  correctAnswer: string;
+  answeredIndex: number;
+  score: number;
+  totalQuestions: number;
+  finished: boolean;
+  nextQuestion: QuizQuestion | null;
+  result?: QuizSummary;
+}
+
+export interface LeaderboardEntry extends QuizSummary { rank: number }
+
 export interface CreateQuizOptions {
-  amount: number;
+  amount?: number;
   categoryId?: number;
-  difficulty?: "easy" | "medium" | "hard";
-  type?: "multiple" | "boolean";
-  playerName: string;
+  difficulty?: Difficulty;
+  type?: QuestionType;
+  playerName?: string;
 }
 
 async function request<T>(
@@ -74,41 +86,29 @@ async function request<T>(
 }
 
 export const api = {
-  health: () =>
-    request<{ status: string; service: string }>("/health"),
+  health: () => request<{ status: string; service: string }>("/health"),
 
-  getCategories: () =>
-    request<QuizCategory[]>("/categories"),
+  getCategories: async () =>
+    (await request<{ categories: QuizCategory[] }>("/categories")).categories,
 
   createQuiz: (options: CreateQuizOptions) =>
-    request<QuizSession>("/quizzes", {
-      method: "POST",
-      body: JSON.stringify(options),
-    }),
+    request<QuizSession>("/quizzes", { method: "POST", body: JSON.stringify(options) }),
 
   getQuiz: (quizId: string) =>
-    request<QuizSession & { score: number; finished: boolean }>(
-      `/quizzes/${encodeURIComponent(quizId)}`,
-    ),
+    request<{
+      quizId: string; currentIndex: number; totalQuestions: number;
+      score: number; finished: boolean; question: QuizQuestion | null;
+    }>(`/quizzes/${encodeURIComponent(quizId)}`),
 
   submitAnswer: (quizId: string, answer: string) =>
-    request<QuizResult>(
-      `/quizzes/${encodeURIComponent(quizId)}/answers`,
-      {
-        method: "POST",
-        body: JSON.stringify({ answer }),
-      },
-    ),
+    request<AnswerResult>(`/quizzes/${encodeURIComponent(quizId)}/answers`, {
+      method: "POST",
+      body: JSON.stringify({ answer }),
+    }),
 
   getResults: (quizId: string) =>
-    request<QuizResult>(
-      `/quizzes/${encodeURIComponent(quizId)}/results`,
-    ),
+    request<QuizSummary>(`/quizzes/${encodeURIComponent(quizId)}/results`),
 
-  getLeaderboard: () =>
-    request<Array<{
-      playerName: string;
-      score: number;
-      totalQuestions: number;
-    }>>("/leaderboard"),
+  getLeaderboard: async () =>
+    (await request<{ leaderboard: LeaderboardEntry[] }>("/leaderboard")).leaderboard,
 };

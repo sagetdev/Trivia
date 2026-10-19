@@ -2,7 +2,6 @@ import React from 'react';
 import { View } from 'react-native';
 import { colors } from '../../theme';
 import type { Player } from '../data/mock';
-import { formatNumber } from '../../data/format';
 import { Avatar, Text } from '../ui';
 
 const barHeight: Record<number, number> = { 1: 88, 2: 64, 3: 48 };
@@ -18,7 +17,7 @@ export function PodiumItem({ player }: { player: Player }) {
         {player.name}
       </Text>
       <Text size={12} color={colors.textMuted}>
-        {formatNumber(player.xp)} XP
+        {player.score}/{player.total} XP
       </Text>
       <View
         style={{
