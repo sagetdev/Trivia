@@ -5,7 +5,7 @@ import { colors } from '../../theme';
 import { usePlayer } from '../../hooks/usePlayer';
 import { formatNumber } from '../../components/data/format';
 import { Screen } from '../../components/Screen';
-import { Avatar, IconButton, SectionHeader, Text } from '../../components/ui';
+import { Avatar, SectionHeader, Text } from '../../components/ui';
 import { CategoryCard, DailyChallengeCard, StatCard } from '../../components/features';
 import { Button } from '../../components/ui';
 import { ActivityIndicator } from 'react-native';
@@ -44,7 +44,6 @@ export default function HomeScreen() {
             </Text>
           </View>
         </View>
-        <IconButton icon="bell" label="Notifications" />
       </View>
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
