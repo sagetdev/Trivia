@@ -64,7 +64,7 @@ export default function HomeScreen() {
         />
       </View>
 
-      <DailyChallengeCard onPlay={() => openCategory('any')} />
+      <DailyChallengeCard onPlay={() => router.push({ pathname: '/(quiz)/play', params: { category: 'any', difficulty: 'medium', count: '10', time: '30', challenge: 'daily' } })} />
 
       <SectionHeader title="Categories" actionLabel="See all" onActionPress={() => router.push('/explore')} />
 
