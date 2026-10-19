@@ -14,10 +14,13 @@ export default function MultiplayerScreen() {
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [answeredIndex, setAnsweredIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { getPlayerName().then(setName).catch(() => {}); }, []);
+  useEffect(() => { setAnsweredIndex(null); setSelected(null); }, [room?.currentIndex]);
+
   useEffect(() => {
     if (!room || !playerId || room.status === "finished") return;
     const timer = setInterval(() => { api.getRoom(room.code, playerId).then(setRoom).catch(() => {}); }, 1800);
@@ -39,7 +42,7 @@ export default function MultiplayerScreen() {
     setLoading(true); setError(null);
     try {
       const result = await api.submitRoomAnswer(room.code, playerId, selected, room.currentIndex);
-      setRoom(result.room); setSelected(null);
+      setRoom(result.room); setSelected(null); setAnsweredIndex(room.currentIndex);
     } catch (e) { setError(e instanceof Error ? e.message : "Impossible d'envoyer la réponse."); }
     finally { setLoading(false); }
   };
@@ -79,9 +82,9 @@ export default function MultiplayerScreen() {
           {room.status === "waiting" && room.players[0]?.id === playerId && <Button label="Start game (minimum 2 players)" onPress={start} disabled={room.players.length < 2 || loading} />}
           {room.status === "playing" && room.question && <>
             <Text size={19} weight="semibold">{room.question.question}</Text>
-            {room.question.answers.map((option, index) => <OptionCard key={option} letter={String.fromCharCode(65 + index)} label={option} state={selected === option ? "selected" : "default"} disabled={loading} onPress={() => setSelected(option)} />)}
-            <Button label="Submit answer" onPress={answer} disabled={!selected || loading} />
-            <Text size={12} color={colors.textMuted}>The next question appears when everyone has answered.</Text>
+            {room.question.answers.map((option, index) => <OptionCard key={option} letter={String.fromCharCode(65 + index)} label={option} state={selected === option ? "selected" : "default"} disabled={loading || answeredIndex === room.currentIndex} onPress={() => setSelected(option)} />)}
+            <Button label={answeredIndex === room.currentIndex ? "Waiting for other players…" : "Submit answer"} onPress={answer} disabled={!selected || loading || answeredIndex === room.currentIndex} />
+            <Text size={12} color={colors.textMuted}>The next question appears when everyone has answered or the server timer expires.</Text>
           </>}
           {room.status === "finished" && <>
             <Text size={20} weight="bold">Final ranking</Text>
