@@ -44,6 +44,7 @@ interface LeaderboardEntry {
   accuracy: number;
   durationSeconds: number;
   finishedAt: string;
+  category?: string;
 }
 
 const sessions = new Map<string, QuizSession>();
@@ -251,6 +252,7 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       accuracy: session.score / total,
       durationSeconds: Math.max(0, Math.round((now - Date.parse(session.startedAt)) / 1000)),
       finishedAt: session.finishedAt,
+      category: session.questions[0]?.category ?? "Mixed",
     });
     leaderboard.sort((a, b) => b.accuracy - a.accuracy || b.score - a.score || a.durationSeconds - b.durationSeconds);
     leaderboard.splice(1000);
@@ -303,8 +305,39 @@ router.get("/quizzes/:id/review", (req, res) => {
   res.json({ quizId: session.id, score: session.score, total: session.questions.length, answers: session.answers });
 });
 
-router.get("/leaderboard", (_req, res) => {
-  res.json({ leaderboard: leaderboard.slice(0, 100).map((entry, index) => ({ rank: index + 1, ...entry })) });
+router.get("/leaderboard", (req, res) => {
+  const scope = typeof req.query.scope === "string" ? req.query.scope : "global";
+  const category = typeof req.query.category === "string" ? req.query.category.toLowerCase() : "";
+  const names = typeof req.query.players === "string" ? req.query.players.split(",").map((name) => name.trim().toLowerCase()).filter(Boolean) : [];
+  const weekStart = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  let entries = [...leaderboard];
+  if (scope === "week") entries = entries.filter((entry) => Date.parse(entry.finishedAt) >= weekStart);
+  if (scope === "category" && category) entries = entries.filter((entry) => (entry.category ?? "").toLowerCase() === category);
+  if (scope === "friends" && names.length) entries = entries.filter((entry) => names.includes(entry.playerName.toLowerCase()));
+  entries.sort((a, b) => b.accuracy - a.accuracy || b.score - a.score || a.durationSeconds - b.durationSeconds);
+  res.json({ scope, leaderboard: entries.slice(0, 100).map((entry, index) => ({ rank: index + 1, ...entry })) });
+});
+
+router.get("/stats", (req, res) => {
+  const name = typeof req.query.playerName === "string" ? req.query.playerName.trim().toLowerCase() : "";
+  if (!name) { res.status(400).json({ error: "playerName est requis." }); return; }
+  const records = leaderboard.filter((entry) => entry.playerName.toLowerCase() === name);
+  const totalQuestions = records.reduce((sum, entry) => sum + entry.total, 0);
+  const correctAnswers = records.reduce((sum, entry) => sum + entry.score, 0);
+  const categoryStats = new Map<string, { quizzes: number; correct: number; total: number }>();
+  for (const entry of records) {
+    const key = entry.category ?? "Mixed";
+    const current = categoryStats.get(key) ?? { quizzes: 0, correct: 0, total: 0 };
+    current.quizzes += 1; current.correct += entry.score; current.total += entry.total;
+    categoryStats.set(key, current);
+  }
+  res.json({
+    playerName: name, quizzes: records.length, correctAnswers, totalQuestions,
+    accuracy: totalQuestions ? Math.round(correctAnswers / totalQuestions * 100) : 0,
+    averageDurationSeconds: records.length ? Math.round(records.reduce((sum, entry) => sum + entry.durationSeconds, 0) / records.length) : 0,
+    categories: [...categoryStats.entries()].map(([category, value]) => ({ category, ...value, accuracy: value.total ? Math.round(value.correct / value.total * 100) : 0 })).sort((a, b) => b.accuracy - a.accuracy),
+    history: records.sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt)).slice(0, 50),
+  });
 });
 
 router.get("/history", (req, res) => {
