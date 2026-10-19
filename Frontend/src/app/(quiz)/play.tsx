@@ -18,7 +18,7 @@ const SHOW_SOURCE = __DEV__; // temporaire : visible seulement en développement
 export default function QuizPlayScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string }>();
+  const params = useLocalSearchParams<{ category?: string; difficulty?: string; count?: string; time?: string; challenge?: string }>();
 
   const categoryId = params.category && params.category !== 'any' ? Number(params.category) : undefined;
   const category = findCategory(params.category);
@@ -110,6 +110,7 @@ export default function QuizPlayScreen() {
         pathname: '/(quiz)/results',
         params: {
           category: params.category ?? 'any',
+          challenge: params.challenge ?? '',
           quizId: done.quizId,
           score: String(done.score),
           total: String(done.total),
@@ -177,7 +178,7 @@ export default function QuizPlayScreen() {
         contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24, gap: 20 }}
       >
         <QuizTopBar
-          title={`Question ${index + 1} of ${total}`}
+          title={params.challenge === 'daily' ? `Daily challenge · ${index + 1}/${total}` : `Question ${index + 1} of ${total}`}
           onClose={() => router.replace('/home')}
           timer={timeLimit === null ? null : formatTime(secondsLeft)}
         />
