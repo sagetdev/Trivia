@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { colors } from '../../theme';
@@ -10,6 +10,7 @@ import { CategoryCard, DailyChallengeCard, StatCard } from '../../components/fea
 import { Button } from '../../components/ui';
 import { ActivityIndicator } from 'react-native';
 import { useCategories } from '../../hooks/useCategories';
+import { api, type DailyChallenge } from '../../lib/api';
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -21,6 +22,8 @@ const greeting = () => {
 export default function HomeScreen() {
   const router = useRouter();
   const player = usePlayer();
+  const [dailyChallenge, setDailyChallenge] = useState<DailyChallenge>({ date: new Date().toISOString().slice(0, 10), amount: 10, difficulty: 'medium', timePerQuestion: 30, resetTimezone: 'UTC' });
+  useEffect(() => { api.getDailyChallenge().then(setDailyChallenge).catch(() => {}); }, []);
   const openCategory = (id: string) => router.push({ pathname: '/(quiz)/setup', params: { category: id } });
 
   const { categories, loading, error, reload } = useCategories();
@@ -63,7 +66,7 @@ export default function HomeScreen() {
         />
       </View>
 
-      <DailyChallengeCard onPlay={() => router.push({ pathname: '/(quiz)/play', params: { category: 'any', difficulty: 'medium', count: '10', time: '30', challenge: 'daily' } })} />
+      <DailyChallengeCard onPlay={() => router.push({ pathname: '/(quiz)/play', params: { category: 'any', difficulty: dailyChallenge.difficulty, count: String(dailyChallenge.amount), time: String(dailyChallenge.timePerQuestion ?? 'none'), challenge: 'daily', challengeDate: dailyChallenge.date } })} />
 
       <SectionHeader title="Categories" actionLabel="See all" onActionPress={() => router.push('/explore')} />
 
