@@ -36,6 +36,7 @@ interface QuizSession {
   gameMode: "classic" | "fast" | "survival" | "progressive";
   overallDeadlineAt: number | null;
   mistakes: number;
+  challengeDate?: string;
   answers: AnswerReview[];
   finishedAt?: string;
 }
@@ -49,6 +50,8 @@ interface LeaderboardEntry {
   durationSeconds: number;
   finishedAt: string;
   category?: string;
+  xp?: number;
+  challengeDate?: string;
 }
 
 const sessions = new Map<string, QuizSession>();
@@ -126,13 +129,24 @@ router.get("/categories", async (_req, res) => {
 
 router.post("/quizzes", async (req, res) => {
   const body = req.body as Record<string, unknown>;
-  const amount = body.amount ?? 10;
-  const categoryId = body.categoryId;
-  const difficulty = body.difficulty;
+  const challengeDate = typeof body.challengeDate === "string" ? body.challengeDate : undefined;
+  const dailyDifficulty = (date: string): Difficulty => {
+    const seed = [...date].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return (["easy", "medium", "hard"] as const)[seed % 3];
+  };
+  if (challengeDate && challengeDate !== new Date().toISOString().slice(0, 10)) {
+    res.status(400).json({ error: "Le défi quotidien doit correspondre à la date UTC actuelle." }); return;
+  }
+  if (challengeDate && leaderboard.some((entry) => entry.playerName.toLowerCase() === String(body.playerName ?? "Joueur").trim().toLowerCase() && entry.challengeDate === challengeDate)) {
+    res.status(409).json({ error: "Tu as déjà terminé le défi quotidien aujourd'hui." }); return;
+  }
+  const amount = challengeDate ? 10 : body.amount ?? 10;
+  const categoryId = challengeDate ? undefined : body.categoryId;
+  const difficulty = challengeDate ? dailyDifficulty(challengeDate) : body.difficulty;
   const type = body.type;
   const playerName = body.playerName ?? "Joueur";
-  const gameMode = body.gameMode ?? "classic";
-  const timePerQuestion = body.timePerQuestion === null || body.timePerQuestion === undefined
+  const gameMode = challengeDate ? "classic" : body.gameMode ?? "classic";
+  const timePerQuestion = challengeDate ? 30 : body.timePerQuestion === null || body.timePerQuestion === undefined
     ? null
     : body.timePerQuestion;
 
@@ -193,6 +207,7 @@ router.post("/quizzes", async (req, res) => {
       gameMode: gameMode as QuizSession["gameMode"],
       overallDeadlineAt: gameMode === "fast" ? now + 60_000 : null,
       mistakes: 0,
+      challengeDate,
       answers: [],
     };
     sessions.set(id, session);
@@ -276,6 +291,8 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       durationSeconds: Math.max(0, Math.round((now - Date.parse(session.startedAt)) / 1000)),
       finishedAt: session.finishedAt,
       category: session.questions[0]?.category ?? "Mixed",
+      xp: session.score * (session.questions[0]?.difficulty === "easy" ? 8 : session.questions[0]?.difficulty === "hard" ? 16 : 12),
+      ...(session.challengeDate ? { challengeDate: session.challengeDate } : {}),
     });
     leaderboard.sort((a, b) => b.accuracy - a.accuracy || b.score - a.score || a.durationSeconds - b.durationSeconds);
     leaderboard.splice(1000);
@@ -300,6 +317,7 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       playerName: session.playerName,
       score: session.score,
       total: session.answers.length,
+      xp: session.score * (session.questions[0]?.difficulty === "easy" ? 8 : session.questions[0]?.difficulty === "hard" ? 16 : 12),
       finishedAt: session.finishedAt,
     } } : {}),
   });
