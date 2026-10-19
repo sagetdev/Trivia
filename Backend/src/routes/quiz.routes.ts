@@ -337,7 +337,7 @@ router.get("/leaderboard", (req, res) => {
   const weekStart = Date.now() - 7 * 24 * 60 * 60 * 1000;
   let entries = [...leaderboard];
   if (scope === "week") entries = entries.filter((entry) => Date.parse(entry.finishedAt) >= weekStart);
-  if (scope === "category" && category) entries = entries.filter((entry) => (entry.category ?? "").toLowerCase() === category);
+  if (scope === "category" && category) entries = entries.filter((entry) => (entry.category ?? "").toLowerCase().includes(category));
   if (scope === "friends" && names.length) entries = entries.filter((entry) => names.includes(entry.playerName.toLowerCase()));
   entries.sort((a, b) => b.accuracy - a.accuracy || b.score - a.score || a.durationSeconds - b.durationSeconds);
   res.json({ scope, leaderboard: entries.slice(0, 100).map((entry, index) => ({ rank: index + 1, ...entry })) });
