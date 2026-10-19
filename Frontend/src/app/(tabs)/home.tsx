@@ -23,7 +23,11 @@ export default function HomeScreen() {
   const openCategory = (id: string) => router.push({ pathname: '/(quiz)/setup', params: { category: id } });
 
   const { categories, loading, error, reload } = useCategories();
-  const rows = [0, 2, 4].map((i) => categories.slice(i, i + 2)).filter((r) => r.length);
+
+  const HOME_LIMIT = 25;
+  const shown = categories.slice(0, HOME_LIMIT);
+  const rows: (typeof categories)[] = [];
+  for (let i = 0; i < shown.length; i += 2) rows.push(shown.slice(i, i + 2));
 
   return (
     <Screen scroll>

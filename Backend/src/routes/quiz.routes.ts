@@ -6,7 +6,7 @@ import {
   type QuizQuestion,
   type Difficulty,
   type QuestionType,
-} from "../services/opentdb.service";
+} from "../services/questions.service";
 
 const router = Router();
 

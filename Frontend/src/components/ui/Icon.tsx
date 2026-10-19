@@ -2,7 +2,8 @@ import React from 'react';
 import {
   Activity, Bell, Check, ChevronLeft, ChevronRight, CircleHelp, Clock, Film, Flame,
   FlaskConical, Globe, House, Landmark, Lock, Moon, Music, Pencil, Search, Settings,
-  Shield, Target, Trophy, User, Volume2, X, Zap,
+  Shield, Target, Trophy, User, Volume2, X, Zap,Brain, BookOpen, Theater, Tv, Gamepad2, Dices, Leaf, Cpu, Calculator,
+  ScrollText, Vote, Palette, Star, PawPrint, Car, Smartphone, Swords, Smile, Sparkles,
 } from 'lucide-react-native';
 import { colors } from '../../theme';
 
@@ -33,6 +34,25 @@ export const icons = {
   volume: Volume2,
   x: X,
   zap: Zap,
+  brain: Brain,
+  book: BookOpen,
+  theater: Theater,
+  tv: Tv,
+  gamepad: Gamepad2,
+  dice: Dices,
+  leaf: Leaf,
+  cpu: Cpu,
+  calculator: Calculator,
+  scroll: ScrollText,
+  vote: Vote,
+  palette: Palette,
+  star: Star,
+  paw: PawPrint,
+  car: Car,
+  phone: Smartphone,
+  swords: Swords,
+  smile: Smile,
+  sparkles: Sparkles,
 } as const;
 
 export type IconName = keyof typeof icons;

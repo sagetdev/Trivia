@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api, type QuizCategory } from '../lib/api';
 import type { CategoryColor } from '../theme';
 import type { IconName } from '../components/ui/Icon';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Category {
   id: string;
@@ -14,38 +15,86 @@ export const MIXED: Category = { id: 'any', name: 'Mixed', icon: 'target', color
 
 const palette: CategoryColor[] = ['blue', 'orange', 'green', 'pink', 'purple', 'teal'];
 
-const rules: { re: RegExp; icon: IconName; color: CategoryColor }[] = [
-  { re: /film|television|cartoon|anime|comics/i, icon: 'film', color: 'pink' },
-  { re: /music/i, icon: 'music', color: 'purple' },
-  { re: /science|computers|mathematics|gadgets/i, icon: 'flask', color: 'blue' },
-  { re: /history|politic|mythology|art/i, icon: 'landmark', color: 'orange' },
-  { re: /geography|animals/i, icon: 'globe', color: 'green' },
-  { re: /sports|vehicles/i, icon: 'activity', color: 'teal' },
-];
+const iconById: Record<number, IconName> = {
+  9: 'brain',
+  10: 'book',
+  11: 'film',
+  12: 'music',
+  13: 'theater',
+  14: 'tv',
+  15: 'gamepad',
+  16: 'dice',
+  17: 'leaf',
+  18: 'cpu',
+  19: 'calculator',
+  20: 'scroll',
+  21: 'activity',
+  22: 'globe',
+  23: 'landmark',
+  24: 'vote',
+  25: 'palette',
+  26: 'star',
+  27: 'paw',
+  28: 'car',
+  29: 'sparkles',
+  30: 'phone',
+  31: 'swords',
+  32: 'smile',
+  101: 'brain',
+  102: 'flask',
+  103: 'landmark',
+  104: 'globe',
+  105: 'film',
+  106: 'music',
+  107: 'book',
+  108: 'activity',
+  109: 'theater',
+  110: 'sparkles',
+};
 
 export const shortName = (name: string) => name.replace(/^(Entertainment|Science): /, '');
 
-const toCategory = (c: QuizCategory): Category => {
-  const rule = rules.find((r) => r.re.test(c.name));
-  return {
-    id: String(c.id),
-    name: shortName(c.name),
-    icon: rule?.icon ?? 'help',
-    color: rule?.color ?? palette[c.id % palette.length],
-  };
-};
+const toCategory = (c: QuizCategory): Category => ({
+  id: String(c.id),
+  name: shortName(c.name),
+  icon: iconById[c.id] ?? 'help',
+  color: palette[c.id % palette.length],
+});
+
+const STORAGE_KEY = `categories:v3:${process.env.EXPO_PUBLIC_API_URL ?? 'local'}`;
+const TTL = 24 * 60 * 60 * 1000;
 
 let cache: Category[] | null = null;
 let inflight: Promise<Category[]> | null = null;
 
+async function fetchAndStore(): Promise<Category[]> {
+  const list = (await api.getCategories()).map(toCategory);
+  cache = list;
+  AsyncStorage.setItem(STORAGE_KEY, JSON.stringify({ savedAt: Date.now(), data: list })).catch(() => {});
+  return list;
+}
+
 export function loadCategories(): Promise<Category[]> {
   if (cache) return Promise.resolve(cache);
-  inflight ??= api
-    .getCategories()
-    .then((list) => (cache = list.map(toCategory)))
-    .finally(() => {
-      inflight = null;
-    });
+  inflight ??= (async () => {
+    try {
+      const raw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as { savedAt: number; data: Category[] };
+        if (Array.isArray(saved.data) && saved.data.length > 0) {
+          const data = saved.data;
+          cache = data;
+          if (Date.now() - saved.savedAt > TTL) fetchAndStore().catch(() => {});
+          return data;
+        }
+      }
+    } catch {
+      // cache illisible : on retombe sur le réseau
+    }
+    return fetchAndStore();
+  })().finally(() => {
+    inflight = null;
+  });
   return inflight;
 }
 
