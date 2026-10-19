@@ -24,7 +24,7 @@ export interface AnswerResult {
 }
 export interface AnswerReview {
   question: string; category: string; difficulty: Difficulty; answers: string[];
-  selectedAnswer: string | null; correctAnswer: string; isCorrect: boolean; timedOut: boolean;
+  selectedAnswer: string | null; correctAnswer: string; isCorrect: boolean; timedOut: boolean; explanation?: string;
 }
 export interface LeaderboardEntry extends QuizSummary { rank: number; accuracy?: number }
 export interface PlayerAnalytics {
