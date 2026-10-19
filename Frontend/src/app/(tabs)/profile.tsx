@@ -29,17 +29,22 @@ export default function ProfileScreen() {
   const [analytics, setAnalytics] = useState<PlayerAnalytics | null>(null);
   useEffect(() => { api.getStats(player.name).then(setAnalytics).catch(() => setAnalytics(null)); }, [player.name]);
   const saveName = async () => { await setPlayerName(draft); await player.refresh(); setEditing(false); };
+  const totalXp = analytics?.xp ?? player.xp;
+  const level = Math.floor(totalXp / 100) + 1;
+  const nextLevelXp = level * 100;
+  const quizCount = analytics?.quizzes ?? player.quizzes;
+  const accuracy = analytics?.accuracy ?? player.accuracy;
 
   const achievements: Achievement[] = [
-    { id: 'first', label: 'First quiz', icon: 'flame', color: 'orange', locked: player.quizzes < 1 },
-    { id: 'perfect', label: 'Perfect', icon: 'target', color: 'purple', locked: !player.stats.records.some((record) => record.score === record.total && record.total > 0) },
-    { id: 'dedicated', label: '10 quizzes', icon: 'zap', color: 'blue', locked: player.quizzes < 10 },
-    { id: 'xp', label: '500 XP', icon: 'star', color: 'teal', locked: player.xp < 500 },
+    { id: 'first', label: 'First quiz', icon: 'flame', color: 'orange', locked: quizCount < 1 },
+    { id: 'perfect', label: 'Perfect', icon: 'target', color: 'purple', locked: !(analytics?.history.some((record) => record.score === record.total && record.total > 0) ?? player.stats.records.some((record) => record.score === record.total && record.total > 0)) },
+    { id: 'dedicated', label: '10 quizzes', icon: 'zap', color: 'blue', locked: quizCount < 10 },
+    { id: 'xp', label: '500 XP', icon: 'star', color: 'teal', locked: totalXp < 500 },
   ];
 
   const stats = [
-    { value: String(player.quizzes), label: 'Quizzes' },
-    { value: `${player.accuracy}%`, label: 'Accuracy' },
+    { value: String(quizCount), label: 'Quizzes' },
+    { value: `${accuracy}%`, label: 'Accuracy' },
     { value: `${player.bestStreak} days`, label: 'Best streak' },
   ];
 
@@ -58,19 +63,19 @@ export default function ProfileScreen() {
           {player.name}
         </Text>
         <Text size={14} color={colors.textMuted}>
-          {player.handle} · Level {player.level}
+          {player.handle} · Level {level}
         </Text>
 
         <View style={{ width: '100%', gap: 6 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text size={13} weight="medium" color={colors.textMuted}>
-              {formatNumber(player.xp)} / {formatNumber(player.nextLevelXp)} XP
+              {formatNumber(totalXp)} / {formatNumber(nextLevelXp)} XP
             </Text>
             <Text size={13} weight="semibold" color={colors.primary}>
-              Level {player.level + 1}
+              Level {level + 1}
             </Text>
           </View>
-          <ProgressBar progress={player.xp / player.nextLevelXp} />
+          <ProgressBar progress={totalXp / nextLevelXp} />
         </View>
       </View>
 
