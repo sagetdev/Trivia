@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { api } from '../../lib/api';
+import { api, type LeaderboardScope } from '../../lib/api';
 import type { Player } from '../../components/data/mock';
 import { usePlayer } from '../../hooks/usePlayer';
 import type { CategoryColor } from '../../theme';
@@ -18,6 +18,7 @@ const initialsOf = (name: string) =>
 export default function RankingScreen() {
   const player = usePlayer();
   const [players, setPlayers] = useState<Player[]>([]);
+  const [scope, setScope] = useState<LeaderboardScope>('global');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,7 +26,7 @@ export default function RankingScreen() {
     setLoading(true);
     setError(null);
     api
-      .getLeaderboard()
+      .getLeaderboard(scope)
       .then((list) =>
         setPlayers(
           list.map((e, i) => ({
@@ -41,7 +42,7 @@ export default function RankingScreen() {
       )
       .catch((e) => setError(e instanceof Error ? e.message : 'Erreur inconnue'))
       .finally(() => setLoading(false));
-  }, [player.name]);
+  }, [player.name, scope]);
 
   useFocusEffect(load);
 
@@ -54,6 +55,10 @@ export default function RankingScreen() {
       <Text size={28} weight="bold">
         Leaderboard
       </Text>
+      <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Button label="Global" variant={scope === 'global' ? 'primary' : 'secondary'} onPress={() => setScope('global')} />
+        <Button label="Last 7 days" variant={scope === 'week' ? 'primary' : 'secondary'} onPress={() => setScope('week')} />
+      </View>
 
       {loading && <ActivityIndicator color={colors.primary} />}
 
