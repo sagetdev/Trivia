@@ -39,7 +39,7 @@ function randomInteger(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-async function getOpenTdbQuestions(
+async function getOpenTdbQuestionsStrict(
   amount: number,
   options: { categoryId?: number; difficulty?: Difficulty; type?: QuestionType },
   includeTrueFalse: boolean,
@@ -60,6 +60,90 @@ async function getOpenTdbQuestions(
       : Promise.resolve([]),
   ]);
   return [...trueFalse, ...multiple];
+}
+
+/**
+ * Retry progressively when a provider has too few questions for the exact
+ * filters. Preserve category first, then relax difficulty, and only then
+ * fall back to mixed categories as a last resort.
+ */
+async function getOpenTdbQuestions(
+  amount: number,
+  options: { categoryId?: number; difficulty?: Difficulty; type?: QuestionType },
+  includeTrueFalse: boolean,
+): Promise<QuizQuestion[]> {
+  try {
+    return await getOpenTdbQuestionsStrict(amount, options, includeTrueFalse);
+  } catch (firstError) {
+    if (options.difficulty) {
+      try {
+        return await getOpenTdbQuestionsStrict(
+          amount,
+          { ...options, difficulty: undefined },
+          includeTrueFalse,
+        );
+      } catch {
+        // Continue to the category fallback below.
+      }
+    }
+
+    if (options.categoryId !== undefined) {
+      try {
+        return await getOpenTdbQuestionsStrict(
+          amount,
+          { ...options, categoryId: undefined, difficulty: undefined },
+          includeTrueFalse,
+        );
+      } catch {
+        // Keep the original error when every fallback fails.
+      }
+    }
+
+    throw firstError;
+  }
+}
+
+async function getTriviaQuestionsWithFallback(options: {
+  amount: number;
+  categoryId?: number;
+  difficulty?: Difficulty;
+}): Promise<QuizQuestion[]> {
+  try {
+    const questions = await triviaapi.getQuestions({
+      ...options,
+      type: "multiple",
+    });
+    if (questions.length >= options.amount) return questions.slice(0, options.amount);
+    throw new Error("The Trivia API a retourné trop peu de questions.");
+  } catch (firstError) {
+    if (options.difficulty) {
+      try {
+        const questions = await triviaapi.getQuestions({
+          ...options,
+          difficulty: undefined,
+          type: "multiple",
+        });
+        if (questions.length >= options.amount) return questions.slice(0, options.amount);
+      } catch {
+        // Try the final category fallback.
+      }
+    }
+
+    if (options.categoryId !== undefined) {
+      try {
+        const questions = await triviaapi.getQuestions({
+          amount: options.amount,
+          difficulty: undefined,
+          type: "multiple",
+        });
+        if (questions.length >= options.amount) return questions.slice(0, options.amount);
+      } catch {
+        // Preserve the first useful provider error.
+      }
+    }
+
+    throw firstError;
+  }
 }
 
 export async function getQuestions(options: {
@@ -89,11 +173,10 @@ export async function getQuestions(options: {
     : (await opentdb.getCategories()).find((category) => category.id === options.categoryId)?.name;
 
   const [triviaResult, openTdbResult] = await Promise.allSettled([
-    triviaapi.getQuestions({
+    getTriviaQuestionsWithFallback({
       amount: triviaCount,
       categoryId: triviaCategoryId,
       difficulty: options.difficulty,
-      type: "multiple",
     }),
     getOpenTdbQuestions(openTdbCount, options, options.type === undefined),
   ]);
@@ -109,11 +192,10 @@ export async function getQuestions(options: {
 
   if (openTdbResult.status === "rejected") {
     // The Trivia API ne fournit pas de vrai/faux, mais peut compléter le quiz.
-    const fallback = await triviaapi.getQuestions({
+    const fallback = await getTriviaQuestionsWithFallback({
       amount: options.amount,
       categoryId: triviaCategoryId,
       difficulty: options.difficulty,
-      type: "multiple",
     });
     return shuffle(fallback.map((question) => ({
       ...question,
