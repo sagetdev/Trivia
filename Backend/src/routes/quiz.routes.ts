@@ -21,6 +21,7 @@ interface AnswerReview {
   correctAnswer: string;
   isCorrect: boolean;
   timedOut: boolean;
+  explanation?: string;
 }
 
 interface QuizSession {
