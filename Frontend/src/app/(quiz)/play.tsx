@@ -62,7 +62,7 @@ export default function QuizPlayScreen() {
     } finally {
       setLoading(false);
     }
-  }, [amount, categoryId, difficulty]);
+  }, [amount, categoryId, difficulty, timeLimit]);
 
   useEffect(() => {
     if (booted.current) return;
