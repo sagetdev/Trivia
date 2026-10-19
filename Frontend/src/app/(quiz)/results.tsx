@@ -98,7 +98,7 @@ export default function QuizResultsScreen() {
           <Button
             label="Play again"
             onPress={() => router.replace({ pathname: '/(quiz)/setup', params: { category: params.category ?? 'any' } })}          />
-          <Button label="Review answers" variant="secondary" />
+          <Button label="Review answers" variant="secondary" onPress={() => router.push({ pathname: "/(quiz)/review", params: { quizId: params.quizId ?? "" } })} disabled={!params.quizId} />
           <Button label="Back to home" variant="ghost" onPress={() => router.replace('/home')} />
         </View>
       </ScrollView>
