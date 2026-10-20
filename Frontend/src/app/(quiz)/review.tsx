@@ -59,7 +59,7 @@ export default function QuizReviewScreen() {
         {error && (
           <Animated.View entering={reduceMotion ? undefined : FadeInDown.duration(220)}>
             <Card radius={16} style={{ padding: 16, gap: 8 }}>
-              <Icon name="alert-circle" size={22} color={colors.error} />
+              <Icon name="help" size={22} color={colors.error} />
               <Text size={15} color={colors.error}>{error}</Text>
               <Button label="Réessayer" onPress={() => {
                 if (!quizId) return;
@@ -138,7 +138,7 @@ export default function QuizReviewScreen() {
 
               <View style={{ padding: 12, borderRadius: 12, backgroundColor: colors.surface, gap: 5 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Icon name="lightbulb" size={16} color={colors.primary} />
+                  <Icon name="book" size={16} color={colors.primary} />
                   <Text size={12} weight="semibold" color={colors.textMuted}>Explication</Text>
                 </View>
                 <Text size={13} lineHeight={20} color={colors.textMuted}>
