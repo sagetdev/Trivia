@@ -34,6 +34,7 @@
 - [~] Animation légère de pression/rebond sur les cartes de réponse (`OptionCard.tsx`); test local à faire.
 - [~] Entrée animée du panneau de feedback (`FeedbackSheet.tsx`); vérifier le comportement en jeu et l'accessibilité.
 - [~] Barre de progression animée (`ProgressBar.tsx`); vérifier le rendu et les types Reanimated localement.
+- [~] Correction des réponses : apparition progressive des cartes et des choix, en respectant `useReducedMotion` (`review.tsx`); test local requis.
 - [ ] Animation du chrono avec alerte visuelle discrète quand le temps devient faible.
 - [ ] Animation de score et compteur d'XP.
 - [ ] Transition d'entrée/sortie des écrans et des cartes, sans dupliquer les routes.
@@ -168,6 +169,7 @@
 |---|---|---|---|---|
 | 2026-10-19 | Création de la roadmap | `ROADMAP_FEATURES.md` | À lancer sur l'environnement local | Checklist créée; aucune fonctionnalité n'est déclarée terminée sans test |
 | 2026-10-19 | Premier lot d'animations quiz | `Frontend/src/components/ui/OptionCard.tsx`, `Frontend/src/components/ui/ProgressBar.tsx`, `Frontend/src/components/features/FeedbackSheet.tsx` | Non exécutés : les changements ont été appliqués au dépôt distant et doivent être récupérés puis testés dans l'environnement local | Animations de rebond/entrée, progression et panneau de feedback ajoutées; validation TypeScript/Expo requise |
+| 2026-10-19 | Animation de la correction | `Frontend/src/app/(quiz)/review.tsx` | Non exécutés : compilation et test manuel requis | Le mode de correction existant est conservé; cartes et choix apparaissent progressivement, avec prise en compte de la réduction des animations. État vide/erreur et bouton de nouvelle tentative ajoutés. |
 
 ## Règles de mise à jour
 
