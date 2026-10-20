@@ -8,7 +8,7 @@
 
 ## État actuel
 
-- [~] Créer et conserver cette checklist versionnée.
+- [x] Créer et conserver cette checklist versionnée (commit de suivi sur la branche de travail).
 - [ ] Examiner l'état Git local et les fichiers de sauvegarde sans les supprimer.
 - [ ] Établir les tests de référence : TypeScript frontend/backend, démarrage Expo, démarrage API, parcours quiz complet.
 - [ ] Vérifier les dépendances déjà installées avant d'en ajouter.
