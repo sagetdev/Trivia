@@ -36,6 +36,9 @@ export default function QuizPlayScreen() {
   const [question, setQuestion] = useState<QuizQuestion | null>(null);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+  // Keep the latest choice synchronously available to the submit handler.
+  // This avoids validating a stale React state during fast interactions/transitions.
+  const selectedRef = useRef<number | null>(null);
   const [revealed, setRevealed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ isCorrect: boolean; correctAnswer: string } | null>(null);
@@ -104,6 +107,7 @@ export default function QuizPlayScreen() {
               setQuestion(session.question);
               setIndex(session.currentIndex);
               setTotal(session.totalQuestions);
+              selectedRef.current = null;
               setSelected(null);
               setRevealed(false);
               setFeedback(null);
@@ -143,8 +147,9 @@ export default function QuizPlayScreen() {
   }, [gameMode, quizId, question, revealed, submitting, error, send]);
 
   const submit = () => {
-    if (selected === null || !question) return;
-    send(question.answers[selected], false);
+    const answerIndex = selectedRef.current;
+    if (answerIndex === null || !question || !question.answers[answerIndex]) return;
+    send(question.answers[answerIndex], false);
   };
 
   const next = async () => {
@@ -169,6 +174,7 @@ export default function QuizPlayScreen() {
     setQuestion(nextQuestion.current);
     nextQuestion.current = null;
     setIndex((i) => i + 1);
+    selectedRef.current = null;
     setSelected(null);
     setRevealed(false);
     setFeedback(null);
@@ -257,7 +263,11 @@ export default function QuizPlayScreen() {
               label={option}
               state={stateFor(i)}
               disabled={revealed || submitting}
-              onPress={() => setSelected(i)}
+              onPress={() => {
+                if (revealed || submitting) return;
+                selectedRef.current = i;
+                setSelected(i);
+              }}
             />
           ))}
         </View>
