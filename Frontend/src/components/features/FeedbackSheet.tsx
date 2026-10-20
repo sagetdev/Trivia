@@ -1,5 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
+import Animated, { SlideInUp, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
 import { Button, Icon, Text } from '../ui';
@@ -16,12 +17,14 @@ interface Props {
 
 export function FeedbackSheet({ verdict, answer, explanation, isLast, onNext }: Props) {
   const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
   const ok = verdict === 'correct';
   const tone = ok ? colors.success : colors.error;
   const title = ok ? 'Correct! Nice work' : verdict === 'timeout' ? `Time’s up — the answer is ${answer}` : `Not quite — the answer is ${answer}`;
 
   return (
-    <View
+    <Animated.View
+      entering={reduceMotion ? undefined : SlideInUp.duration(220)}
       style={{
         backgroundColor: colors.surface,
         borderTopWidth: 1,
@@ -57,6 +60,6 @@ export function FeedbackSheet({ verdict, answer, explanation, isLast, onNext }: 
         </Text>
       ) : null}
       <Button label={isLast ? 'See results' : 'Next question'} onPress={onNext} />
-    </View>
+    </Animated.View>
   );
 }

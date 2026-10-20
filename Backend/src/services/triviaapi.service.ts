@@ -98,5 +98,6 @@ export async function getQuestions(options: {
     question: item.question.text,
     correctAnswer: item.correctAnswer,
     answers: shuffle([item.correctAnswer, ...item.incorrectAnswers]),
+    source: "The Trivia API",
   }));
 }
