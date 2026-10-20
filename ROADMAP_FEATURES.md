@@ -31,9 +31,9 @@
 
 ### B. Animation et feedback transversal
 - [ ] Auditer Reanimated et la configuration existante avant d'ajouter des dépendances.
-- [ ] Animation légère de pression/rebond sur les boutons et cartes interactives.
-- [ ] Feedback animé correct/incorrect, sans bloquer les réponses rapides.
-- [ ] Progression du quiz animée et synchronisée avec la question courante.
+- [~] Animation légère de pression/rebond sur les cartes de réponse (`OptionCard.tsx`); test local à faire.
+- [~] Entrée animée du panneau de feedback (`FeedbackSheet.tsx`); vérifier le comportement en jeu et l'accessibilité.
+- [~] Barre de progression animée (`ProgressBar.tsx`); vérifier le rendu et les types Reanimated localement.
 - [ ] Animation du chrono avec alerte visuelle discrète quand le temps devient faible.
 - [ ] Animation de score et compteur d'XP.
 - [ ] Transition d'entrée/sortie des écrans et des cartes, sans dupliquer les routes.
@@ -167,6 +167,7 @@
 | Date | Lot | Fichiers modifiés | Tests exécutés | Résultat |
 |---|---|---|---|---|
 | 2026-10-19 | Création de la roadmap | `ROADMAP_FEATURES.md` | À lancer sur l'environnement local | Checklist créée; aucune fonctionnalité n'est déclarée terminée sans test |
+| 2026-10-19 | Premier lot d'animations quiz | `Frontend/src/components/ui/OptionCard.tsx`, `Frontend/src/components/ui/ProgressBar.tsx`, `Frontend/src/components/features/FeedbackSheet.tsx` | Non exécutés : les changements ont été appliqués au dépôt distant et doivent être récupérés puis testés dans l'environnement local | Animations de rebond/entrée, progression et panneau de feedback ajoutées; validation TypeScript/Expo requise |
 
 ## Règles de mise à jour
 
