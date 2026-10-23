@@ -9,6 +9,7 @@ import {
   type QuestionType,
 } from "../services/questions.service";
 import { readPersistentState, writePersistentState } from "../services/persistence.service";
+import { requireDifficultyBatch, requireQuestionCount } from "../services/question-batch";
 
 const router = Router();
 
@@ -199,7 +200,11 @@ router.post("/quizzes", async (req, res) => {
         mediumCount ? getQuestions({ amount: mediumCount, categoryId: categoryId as number | undefined, difficulty: "medium", type: type as QuestionType | undefined }) : Promise.resolve([]),
         hardCount ? getQuestions({ amount: hardCount, categoryId: categoryId as number | undefined, difficulty: "hard", type: type as QuestionType | undefined }) : Promise.resolve([]),
       ]);
-      questions = [...easy, ...medium, ...hard];
+      questions = [
+        ...requireDifficultyBatch(requireQuestionCount(easy, easyCount, "Progressif facile"), "easy", "Progressif"),
+        ...requireDifficultyBatch(requireQuestionCount(medium, mediumCount, "Progressif moyen"), "medium", "Progressif"),
+        ...requireDifficultyBatch(requireQuestionCount(hard, hardCount, "Progressif difficile"), "hard", "Progressif"),
+      ];
     } else if (challengeDate) {
       const cachedQuestions = dailyQuestionCache.get(challengeDate);
       if (cachedQuestions) questions = cachedQuestions;
