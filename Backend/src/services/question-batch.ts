@@ -21,3 +21,21 @@ export function requireQuestionCount<T>(
   }
   return questions.slice(0, requested);
 }
+
+/**
+ * Progressive mode must not silently accept questions from a different level
+ * when a provider has relaxed the requested difficulty as a fallback.
+ */
+export function requireDifficultyBatch<T extends { difficulty: string }>(
+  questions: readonly T[],
+  expected: string,
+  modeLabel: string,
+): T[] {
+  const mismatched = questions.find((question) => question.difficulty !== expected);
+  if (mismatched) {
+    throw new Error(
+      modeLabel + ' attend des questions "' + expected + '", mais le fournisseur a renvoyé "' + mismatched.difficulty + '". Réessaie ou choisis une autre catégorie.',
+    );
+  }
+  return [...questions];
+}
