@@ -431,10 +431,27 @@ router.get("/stats", (req, res) => {
       difficultyStats.set(detail.difficulty, aggregate);
     }
   }
+  const todayUtc = new Date();
+  const todayStart = Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate());
+  const activity = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(todayStart - (29 - index) * 86400000).toISOString().slice(0, 10);
+    return { date, quizzes: 0, correct: 0, total: 0, xp: 0 };
+  });
+  const activityByDate = new Map(activity.map((day) => [day.date, day]));
+  for (const entry of records) {
+    const day = activityByDate.get(entry.finishedAt.slice(0, 10));
+    if (!day) continue;
+    day.quizzes += 1;
+    day.correct += entry.score;
+    day.total += entry.total;
+    day.xp += entry.xp ?? 0;
+  }
+
   res.json({
     playerName: name, quizzes: records.length, xp: records.reduce((sum, entry) => sum + (entry.xp ?? 0), 0), correctAnswers, totalQuestions,
     accuracy: totalQuestions ? Math.round(correctAnswers / totalQuestions * 100) : 0,
     averageDurationSeconds: records.length ? Math.round(records.reduce((sum, entry) => sum + entry.durationSeconds, 0) / records.length) : 0,
+    activity,
     categories: [...categoryStats.entries()].map(([category, value]) => ({ category, ...value, accuracy: value.total ? Math.round(value.correct / value.total * 100) : 0 })).sort((a, b) => b.accuracy - a.accuracy),
     difficultyStats: (["easy", "medium", "hard"] as const)
       .map((difficulty) => {
