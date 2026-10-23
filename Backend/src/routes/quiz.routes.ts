@@ -54,6 +54,7 @@ interface LeaderboardEntry {
   category?: string;
   xp?: number;
   challengeDate?: string;
+  difficultyStats?: { difficulty: Difficulty; correct: number; total: number }[];
 }
 
 const sessions = new Map<string, QuizSession>();
@@ -329,6 +330,16 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       category: session.categoryName ?? "Mixed",
       xp: calculateXp(session),
       ...(session.challengeDate ? { challengeDate: session.challengeDate } : {}),
+      difficultyStats: (["easy", "medium", "hard"] as const)
+        .map((difficulty) => {
+          const answers = session.answers.filter((answer) => answer.difficulty === difficulty);
+          return {
+            difficulty,
+            correct: answers.filter((answer) => answer.isCorrect).length,
+            total: answers.length,
+          };
+        })
+        .filter((entry) => entry.total > 0),
     };
     completedRecords.push(completedRecord);
     leaderboard.push(completedRecord);
@@ -406,17 +417,30 @@ router.get("/stats", (req, res) => {
   const totalQuestions = records.reduce((sum, entry) => sum + entry.total, 0);
   const correctAnswers = records.reduce((sum, entry) => sum + entry.score, 0);
   const categoryStats = new Map<string, { quizzes: number; correct: number; total: number }>();
+  const difficultyStats = new Map<Difficulty, { quizzes: number; correct: number; total: number }>();
   for (const entry of records) {
     const key = entry.category ?? "Mixed";
     const current = categoryStats.get(key) ?? { quizzes: 0, correct: 0, total: 0 };
     current.quizzes += 1; current.correct += entry.score; current.total += entry.total;
     categoryStats.set(key, current);
+    for (const detail of entry.difficultyStats ?? []) {
+      const aggregate = difficultyStats.get(detail.difficulty) ?? { quizzes: 0, correct: 0, total: 0 };
+      aggregate.quizzes += 1;
+      aggregate.correct += detail.correct;
+      aggregate.total += detail.total;
+      difficultyStats.set(detail.difficulty, aggregate);
+    }
   }
   res.json({
     playerName: name, quizzes: records.length, xp: records.reduce((sum, entry) => sum + (entry.xp ?? 0), 0), correctAnswers, totalQuestions,
     accuracy: totalQuestions ? Math.round(correctAnswers / totalQuestions * 100) : 0,
     averageDurationSeconds: records.length ? Math.round(records.reduce((sum, entry) => sum + entry.durationSeconds, 0) / records.length) : 0,
     categories: [...categoryStats.entries()].map(([category, value]) => ({ category, ...value, accuracy: value.total ? Math.round(value.correct / value.total * 100) : 0 })).sort((a, b) => b.accuracy - a.accuracy),
+    difficultyStats: (["easy", "medium", "hard"] as const)
+      .map((difficulty) => {
+        const value = difficultyStats.get(difficulty) ?? { quizzes: 0, correct: 0, total: 0 };
+        return { difficulty, ...value, accuracy: value.total ? Math.round(value.correct / value.total * 100) : 0 };
+      }),
     history: records.sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt)).slice(0, 50),
   });
 });
