@@ -85,7 +85,7 @@
 - [~] Précision par catégorie et difficulté (précision par catégorie déjà disponible; détail par difficulté ajouté, à valider avec des parties réelles).
 - [ ] Meilleur score et meilleure série de bonnes réponses.
 - [ ] Temps moyen de réponse, si la donnée est collectée de façon fiable.
-- [ ] Progression sur 7 jours et 30 jours.
+- [~] Progression sur 7 jours et 30 jours (agrégats UTC et affichage profil ajoutés; tests Android à faire).
 - [ ] Catégories favorites et recommandations basées sur les performances réelles.
 - [ ] Préférences de thème clair/sombre si prises en charge par le design actuel.
 - [ ] Préférences de langue, sons et vibrations.
@@ -174,6 +174,7 @@
 | 2026-10-23 | Lot 1 — lots de questions et mode progressif | `Backend/src/services/question-batch.ts`, `Backend/src/services/questions.service.ts`, `Backend/src/routes/quiz.routes.ts`, `Backend/test/question-batch.test.ts`, `Backend/package.json` | Tests ajoutés mais non exécutés ici; build TypeScript à lancer localement | Les réponses partielles d'Open Trivia DB sont désormais traitées comme un échec de fournisseur afin d'activer les fallbacks. Le mode progressif refuse une difficulté renvoyée qui ne correspond pas au palier demandé. Le statut des fonctionnalités reste à valider avec les tests locaux. |
 | 2026-10-23 | Lot 2 — bibliothèque locale de questions | `Frontend/src/lib/question-library.ts`, `Frontend/src/app/(quiz)/review.tsx`, `Frontend/src/app/library.tsx`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; TypeScript frontend et test Android requis | Ajout du stockage local des favoris, de l'historique des questions vues et des questions incorrectes, avec un écran Bibliothèque accessible depuis le profil. Fonctionnalité en cours jusqu'à validation sur Android. |
 | 2026-10-23 | Lot 3 — statistiques par difficulté | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Les nouveaux résultats enregistrent les totaux/corrections par difficulté et le profil affiche l'exactitude facile/moyen/difficile. Les anciennes parties sans détail restent compatibles mais n'alimentent pas rétroactivement ces statistiques. |
+| 2026-10-23 | Lot 4 — progression sur 7/30 jours | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Ajout d'une série quotidienne UTC sur 30 jours et de résumés 7/30 jours au profil (quiz, précision, réponses correctes, XP). Validation visuelle Android requise. |
 
 ## Règles de mise à jour
 
