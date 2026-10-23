@@ -64,7 +64,7 @@
 ## Priorité 1 — Progression, fidélisation et récompenses
 
 - [ ] Vérifier la persistance réelle de l'XP et corriger les divergences frontend/backend.
-- [ ] Vérifier le calcul du niveau et la progression vers le prochain niveau.
+- [~] Vérifier le calcul du niveau et la progression vers le prochain niveau (barre et XP requis du niveau courant corrigés; validation Android à faire).
 - [ ] Garantir qu'une même partie ne donne pas ses récompenses deux fois.
 - [ ] Séries quotidiennes : fuseau/date, jour manqué, retour après minuit et cas limites.
 - [ ] Défi quotidien : même défi stable pour une date et règles anti-duplication.
@@ -176,6 +176,7 @@
 | 2026-10-23 | Lot 3 — statistiques par difficulté | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Les nouveaux résultats enregistrent les totaux/corrections par difficulté et le profil affiche l'exactitude facile/moyen/difficile. Les anciennes parties sans détail restent compatibles mais n'alimentent pas rétroactivement ces statistiques. |
 | 2026-10-23 | Lot 4 — progression sur 7/30 jours | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Ajout d'une série quotidienne UTC sur 30 jours et de résumés 7/30 jours au profil (quiz, précision, réponses correctes, XP). Validation visuelle Android requise. |
 | 2026-10-23 | Lot 5 — règles de fin et échéances | `Backend/src/services/quiz-rules.ts`, `Backend/src/routes/quiz.routes.ts`, `Backend/test/question-batch.test.ts` | Tests unitaires ajoutés; CI à vérifier | Les conditions de fin sont centralisées; le serveur considère une échéance atteinte à l'instant exact de sa limite. Les tests d'intégration du parcours complet restent à faire. |
+| 2026-10-23 | Lot 6 — progression XP | `Frontend/src/hooks/usePlayer.ts`, `Frontend/src/app/(tabs)/profile.tsx` | TypeScript frontend à vérifier; test visuel Android requis | La barre d'XP affiche maintenant la progression à l'intérieur du niveau courant au lieu de diviser l'XP totale par le seuil du prochain niveau. |
 
 ## Règles de mise à jour
 
