@@ -5,6 +5,7 @@ export interface PersistentState {
   sessions: Array<[string, unknown]>;
   leaderboard: unknown[];
   records: unknown[];
+  dailyQuestions?: Array<[string, unknown]>;
 }
 
 const dataFile = resolve(process.env.QUIZ_DATA_FILE ?? "./data/quiz-store.json");
@@ -17,10 +18,11 @@ export async function readPersistentState(): Promise<PersistentState> {
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions as Array<[string, unknown]> : [],
       leaderboard: Array.isArray(parsed.leaderboard) ? parsed.leaderboard : [],
       records: Array.isArray(parsed.records) ? parsed.records : [],
+      dailyQuestions: Array.isArray(parsed.dailyQuestions) ? parsed.dailyQuestions as Array<[string, unknown]> : [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { sessions: [], leaderboard: [], records: [] };
+      return { sessions: [], leaderboard: [], records: [], dailyQuestions: [] };
     }
     throw error;
   }
