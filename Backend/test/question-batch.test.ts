@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requireQuestionCount } from "../src/services/question-batch";
+import { requireDifficultyBatch, requireQuestionCount } from "../src/services/question-batch";
 
 test("returns an empty batch when zero questions are requested", () => {
   assert.deepEqual(requireQuestionCount(["a"], 0, "provider"), []);
@@ -20,4 +20,15 @@ test("throws when a provider returns fewer questions than requested", () => {
 test("rejects invalid requested counts", () => {
   assert.throws(() => requireQuestionCount([], -1, "provider"), RangeError);
   assert.throws(() => requireQuestionCount([], 1.5, "provider"), RangeError);
+});
+
+test("rejects provider fallback questions at the wrong progressive difficulty", () => {
+  assert.deepEqual(
+    requireDifficultyBatch([{ difficulty: "easy" }, { difficulty: "easy" }], "easy", "Progressif"),
+    [{ difficulty: "easy" }, { difficulty: "easy" }],
+  );
+  assert.throws(
+    () => requireDifficultyBatch([{ difficulty: "medium" }], "easy", "Progressif"),
+    /attend des questions "easy"/,
+  );
 });
