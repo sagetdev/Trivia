@@ -32,6 +32,7 @@ export interface PlayerAnalytics {
   accuracy: number; averageDurationSeconds: number;
   categories: { category: string; quizzes: number; correct: number; total: number; accuracy: number }[];
   difficultyStats?: { difficulty: Difficulty; quizzes: number; correct: number; total: number; accuracy: number }[];
+  activity?: { date: string; quizzes: number; correct: number; total: number; xp: number }[];
   history: LeaderboardEntry[];
 }
 export type LeaderboardScope = "global" | "week" | "category" | "friends";
