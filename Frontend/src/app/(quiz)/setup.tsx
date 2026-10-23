@@ -21,7 +21,7 @@ const times = [
   { id: 'none', label: 'No timer' },
 ];
 
-const modes: { id: GameMode; title: string; subtitle: string; icon: string }[] = [
+const modes: { id: GameMode; title: string; subtitle: string; icon: 'book' | 'clock' | 'star' }[] = [
   { id: 'classic', title: 'Classic', subtitle: 'Play at your pace', icon: 'book' },
   { id: 'timed', title: 'Time attack', subtitle: 'Quick decisions', icon: 'clock' },
   { id: 'daily', title: 'Daily challenge', subtitle: 'A fresh challenge', icon: 'star' },
