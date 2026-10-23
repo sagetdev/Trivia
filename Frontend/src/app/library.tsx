@@ -75,7 +75,6 @@ export default function QuestionLibraryScreen() {
           <View key={item} style={{ flex: 1 }}>
             <Button
               label={tabLabels[item]}
-              size="sm"
               variant={tab === item ? "primary" : "secondary"}
               onPress={() => setTab(item)}
             />
