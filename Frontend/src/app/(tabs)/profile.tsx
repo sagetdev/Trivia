@@ -120,6 +120,8 @@ export default function ProfileScreen() {
         ))}
       </View>
 
+      <Button label="Bibliothèque de questions" variant="secondary" onPress={() => router.push("/library")} />
+
       <SectionHeader title="Recent quizzes" />
       {player.stats.records.length === 0 ? (
         <Text size={14} color={colors.textMuted}>Tes parties terminées apparaîtront ici.</Text>
