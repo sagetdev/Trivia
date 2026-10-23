@@ -19,15 +19,15 @@
 
 ### A. Modes de jeu
 - [ ] Classic : paramètres, nombre de questions, score et écran de résultats cohérents.
-- [ ] 60s Rush : chronomètre global réel de 60 secondes et arrêt fiable.
-- [ ] Survie : fin après 3 mauvaises réponses, sans dépasser cette limite.
-- [ ] Progressif : difficulté réellement progressive et XP cohérents avec la difficulté servie.
-- [ ] Chrono par question : 15 s, 30 s, 45 s et sans limite.
+- [~] 60s Rush : règles serveur de fin et limite temporelle isolées/testées; parcours Android réel à valider.
+- [~] Survie : fin après 3 mauvaises réponses couverte par un test de règle; parcours complet à valider.
+- [~] Progressif : vérification des paliers de difficulté ajoutée; XP et parcours complet à valider.
+- [~] Chrono par question : échéance serveur stricte et testée à la limite exacte; vérifier les quatre choix dans l'app.
 - [ ] Une seule soumission acceptée par question, y compris après timeout/navigation.
 - [ ] Résultats calculés depuis les réponses réellement validées par le serveur.
 - [ ] État de quiz nettoyé correctement entre deux parties.
 - [ ] Gérer les réponses API vides, erreurs réseau, timeouts et abandon/reprise.
-- [ ] Tests de régression pour chaque mode.
+- [~] Tests unitaires des règles de fin et des échéances ajoutés; tests d'intégration pour chaque mode encore à faire.
 
 ### B. Animation et feedback transversal
 - [ ] Auditer Reanimated et la configuration existante avant d'ajouter des dépendances.
@@ -175,6 +175,7 @@
 | 2026-10-23 | Lot 2 — bibliothèque locale de questions | `Frontend/src/lib/question-library.ts`, `Frontend/src/app/(quiz)/review.tsx`, `Frontend/src/app/library.tsx`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; TypeScript frontend et test Android requis | Ajout du stockage local des favoris, de l'historique des questions vues et des questions incorrectes, avec un écran Bibliothèque accessible depuis le profil. Fonctionnalité en cours jusqu'à validation sur Android. |
 | 2026-10-23 | Lot 3 — statistiques par difficulté | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Les nouveaux résultats enregistrent les totaux/corrections par difficulté et le profil affiche l'exactitude facile/moyen/difficile. Les anciennes parties sans détail restent compatibles mais n'alimentent pas rétroactivement ces statistiques. |
 | 2026-10-23 | Lot 4 — progression sur 7/30 jours | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Ajout d'une série quotidienne UTC sur 30 jours et de résumés 7/30 jours au profil (quiz, précision, réponses correctes, XP). Validation visuelle Android requise. |
+| 2026-10-23 | Lot 5 — règles de fin et échéances | `Backend/src/services/quiz-rules.ts`, `Backend/src/routes/quiz.routes.ts`, `Backend/test/question-batch.test.ts` | Tests unitaires ajoutés; CI à vérifier | Les conditions de fin sont centralisées; le serveur considère une échéance atteinte à l'instant exact de sa limite. Les tests d'intégration du parcours complet restent à faire. |
 
 ## Règles de mise à jour
 
