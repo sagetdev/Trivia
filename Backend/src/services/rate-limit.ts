@@ -12,6 +12,7 @@ export interface RateLimitDecision {
 /** Per-process limiter for protecting the anonymous API from accidental bursts. */
 export class InMemoryRateLimiter {
   private readonly buckets = new Map<string, RateLimitBucket>();
+  private lastCleanupAt = 0;
 
   consume(key: string, limit: number, windowMs: number, now = Date.now()): RateLimitDecision {
     if (!key || !Number.isInteger(limit) || limit < 1 || !Number.isFinite(windowMs) || windowMs < 1) {
@@ -33,7 +34,8 @@ export class InMemoryRateLimiter {
     }
 
     bucket.count += 1;
-    if (this.buckets.size > 5000) {
+    if (this.buckets.size > 5000 && now - this.lastCleanupAt >= windowMs) {
+      this.lastCleanupAt = now;
       for (const [bucketKey, value] of this.buckets) {
         if (now - value.windowStartedAt >= windowMs || now < value.windowStartedAt) {
           this.buckets.delete(bucketKey);
