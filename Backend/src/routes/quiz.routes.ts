@@ -9,6 +9,8 @@ import {
   type QuestionType,
 } from "../services/questions.service";
 import { readPersistentState, writePersistentState } from "../services/persistence.service";
+import { requireDifficultyBatch, requireQuestionCount } from "../services/question-batch";
+import { hasDeadlinePassed, shouldFinishQuiz } from "../services/quiz-rules";
 
 const router = Router();
 
@@ -53,6 +55,7 @@ interface LeaderboardEntry {
   category?: string;
   xp?: number;
   challengeDate?: string;
+  difficultyStats?: { difficulty: Difficulty; correct: number; total: number }[];
 }
 
 const sessions = new Map<string, QuizSession>();
@@ -67,6 +70,7 @@ async function persist(): Promise<void> {
     sessions: [...sessions.entries()],
     leaderboard: [...leaderboard],
     records: [...completedRecords],
+    dailyQuestions: [...dailyQuestionCache.entries()],
   };
   persistQueue = persistQueue.catch(() => {}).then(() => writePersistentState(snapshot));
   await persistQueue;
@@ -82,6 +86,11 @@ export async function initializeQuizRoutes(): Promise<void> {
     if (entry && typeof entry === "object") completedRecords.push(entry as LeaderboardEntry);
   }
   if (completedRecords.length === 0) completedRecords.push(...saved.leaderboard as LeaderboardEntry[]);
+  for (const [date, questions] of saved.dailyQuestions ?? []) {
+    if (typeof date === "string" && Array.isArray(questions)) {
+      dailyQuestionCache.set(date, questions as QuizQuestion[]);
+    }
+  }
   for (const entry of saved.leaderboard) {
     if (entry && typeof entry === "object") leaderboard.push(entry as LeaderboardEntry);
   }
@@ -199,7 +208,11 @@ router.post("/quizzes", async (req, res) => {
         mediumCount ? getQuestions({ amount: mediumCount, categoryId: categoryId as number | undefined, difficulty: "medium", type: type as QuestionType | undefined }) : Promise.resolve([]),
         hardCount ? getQuestions({ amount: hardCount, categoryId: categoryId as number | undefined, difficulty: "hard", type: type as QuestionType | undefined }) : Promise.resolve([]),
       ]);
-      questions = [...easy, ...medium, ...hard];
+      questions = [
+        ...requireDifficultyBatch(requireQuestionCount(easy, easyCount, "Progressif facile"), "easy", "Progressif"),
+        ...requireDifficultyBatch(requireQuestionCount(medium, mediumCount, "Progressif moyen"), "medium", "Progressif"),
+        ...requireDifficultyBatch(requireQuestionCount(hard, hardCount, "Progressif difficile"), "hard", "Progressif"),
+      ];
     } else if (challengeDate) {
       const cachedQuestions = dailyQuestionCache.get(challengeDate);
       if (cachedQuestions) questions = cachedQuestions;
@@ -286,10 +299,15 @@ router.post("/quizzes/:id/answers", async (req, res) => {
     res.status(409).json({ error: "Aucune question disponible." }); return;
   }
 
-  const overallTimedOut = session.overallDeadlineAt !== null && Date.now() > session.overallDeadlineAt;
-  const timedOut = overallTimedOut || (session.timePerQuestion !== null &&
-    Date.now() - session.questionStartedAt > session.timePerQuestion * 1000);
-  if (!timedOut && answer !== "" && !question.answers.includes(answer)) {
+  const answerReceivedAt = Date.now();
+  const overallTimedOut = hasDeadlinePassed(session.overallDeadlineAt, answerReceivedAt);
+  const questionTimedOut = session.timePerQuestion !== null &&
+    hasDeadlinePassed(session.questionStartedAt + session.timePerQuestion * 1000, answerReceivedAt);
+  const timedOut = overallTimedOut || questionTimedOut;
+  if (!timedOut && answer === "") {
+    res.status(409).json({ error: "Le chrono n'est pas encore écoulé." }); return;
+  }
+  if (!timedOut && !question.answers.includes(answer)) {
     res.status(400).json({ error: "La réponse ne fait pas partie des choix proposés." }); return;
   }
 
@@ -309,7 +327,13 @@ router.post("/quizzes/:id/answers", async (req, res) => {
   else session.mistakes += 1;
 
   session.currentIndex += 1;
-  const finished = session.currentIndex >= session.questions.length || (session.gameMode === "survival" && session.mistakes >= 3) || overallTimedOut;
+  const finished = shouldFinishQuiz({
+    currentIndex: session.currentIndex,
+    totalQuestions: session.questions.length,
+    gameMode: session.gameMode,
+    mistakes: session.mistakes,
+    overallTimedOut,
+  });
   const now = Date.now();
   if (finished) {
     session.finishedAt = new Date(now).toISOString();
@@ -324,6 +348,16 @@ router.post("/quizzes/:id/answers", async (req, res) => {
       category: session.categoryName ?? "Mixed",
       xp: calculateXp(session),
       ...(session.challengeDate ? { challengeDate: session.challengeDate } : {}),
+      difficultyStats: (["easy", "medium", "hard"] as const)
+        .map((difficulty) => {
+          const answers = session.answers.filter((answer) => answer.difficulty === difficulty);
+          return {
+            difficulty,
+            correct: answers.filter((answer) => answer.isCorrect).length,
+            total: answers.length,
+          };
+        })
+        .filter((entry) => entry.total > 0),
     };
     completedRecords.push(completedRecord);
     leaderboard.push(completedRecord);
@@ -401,17 +435,47 @@ router.get("/stats", (req, res) => {
   const totalQuestions = records.reduce((sum, entry) => sum + entry.total, 0);
   const correctAnswers = records.reduce((sum, entry) => sum + entry.score, 0);
   const categoryStats = new Map<string, { quizzes: number; correct: number; total: number }>();
+  const difficultyStats = new Map<Difficulty, { quizzes: number; correct: number; total: number }>();
   for (const entry of records) {
     const key = entry.category ?? "Mixed";
     const current = categoryStats.get(key) ?? { quizzes: 0, correct: 0, total: 0 };
     current.quizzes += 1; current.correct += entry.score; current.total += entry.total;
     categoryStats.set(key, current);
+    for (const detail of entry.difficultyStats ?? []) {
+      const aggregate = difficultyStats.get(detail.difficulty) ?? { quizzes: 0, correct: 0, total: 0 };
+      aggregate.quizzes += 1;
+      aggregate.correct += detail.correct;
+      aggregate.total += detail.total;
+      difficultyStats.set(detail.difficulty, aggregate);
+    }
   }
+  const todayUtc = new Date();
+  const todayStart = Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate());
+  const activity = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(todayStart - (29 - index) * 86400000).toISOString().slice(0, 10);
+    return { date, quizzes: 0, correct: 0, total: 0, xp: 0 };
+  });
+  const activityByDate = new Map(activity.map((day) => [day.date, day]));
+  for (const entry of records) {
+    const day = activityByDate.get(entry.finishedAt.slice(0, 10));
+    if (!day) continue;
+    day.quizzes += 1;
+    day.correct += entry.score;
+    day.total += entry.total;
+    day.xp += entry.xp ?? 0;
+  }
+
   res.json({
     playerName: name, quizzes: records.length, xp: records.reduce((sum, entry) => sum + (entry.xp ?? 0), 0), correctAnswers, totalQuestions,
     accuracy: totalQuestions ? Math.round(correctAnswers / totalQuestions * 100) : 0,
     averageDurationSeconds: records.length ? Math.round(records.reduce((sum, entry) => sum + entry.durationSeconds, 0) / records.length) : 0,
+    activity,
     categories: [...categoryStats.entries()].map(([category, value]) => ({ category, ...value, accuracy: value.total ? Math.round(value.correct / value.total * 100) : 0 })).sort((a, b) => b.accuracy - a.accuracy),
+    difficultyStats: (["easy", "medium", "hard"] as const)
+      .map((difficulty) => {
+        const value = difficultyStats.get(difficulty) ?? { quizzes: 0, correct: 0, total: 0 };
+        return { difficulty, ...value, accuracy: value.total ? Math.round(value.correct / value.total * 100) : 0 };
+      }),
     history: records.sort((a, b) => Date.parse(b.finishedAt) - Date.parse(a.finishedAt)).slice(0, 50),
   });
 });

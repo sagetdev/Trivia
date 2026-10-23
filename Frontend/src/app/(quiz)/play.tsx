@@ -14,7 +14,6 @@ import { FeedbackSheet, QuizTopBar, Verdict } from '../../components/features';
 
 const LETTERS = ['A', 'B', 'C', 'D'];
 const XP_PER_QUESTION: Record<string, number> = { easy: 8, medium: 12, hard: 16 };
-const SHOW_SOURCE = __DEV__; // temporaire : visible seulement en développement
 
 export default function QuizPlayScreen() {
   const router = useRouter();
@@ -93,6 +92,13 @@ export default function QuizPlayScreen() {
         setRevealed(true);
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Erreur inconnue';
+
+        // Client and server timers can differ by a few milliseconds. Retry a
+        // timeout once the server confirms that its deadline has elapsed.
+        if (isTimeout && message.includes("Le chrono n'est pas encore écoulé")) {
+          setTimeout(() => { void send('', true); }, 100);
+          return;
+        }
 
         // A timeout and a tap can race, or a previous request can finish on the
         // server before this screen receives its response. Recover from that
@@ -243,7 +249,7 @@ export default function QuizPlayScreen() {
           label={`${shortName(question.category)} · ${difficultyLabel}`}
         />
 
-        {SHOW_SOURCE && question.source ? (
+        {question.source ? (
           <Text size={11} color={colors.textFaint}>
             Source : {question.source}
           </Text> 

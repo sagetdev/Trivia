@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { colors } from '../../theme';
 import type { Achievement } from '../../components/data/mock';
 import { usePlayer } from '../../hooks/usePlayer';
@@ -27,11 +27,17 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [analytics, setAnalytics] = useState<PlayerAnalytics | null>(null);
-  useEffect(() => { api.getStats(player.name).then(setAnalytics).catch(() => setAnalytics(null)); }, [player.name]);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    api.getStats(player.name).then((value) => { if (active) setAnalytics(value); }).catch(() => { if (active) setAnalytics(null); });
+    return () => { active = false; };
+  }, [player.name]));
   const saveName = async () => { await setPlayerName(draft); await player.refresh(); setEditing(false); };
   const totalXp = analytics?.xp ?? player.xp;
   const level = Math.floor(totalXp / 100) + 1;
+  const currentLevelXp = (level - 1) * 100;
   const nextLevelXp = level * 100;
+  const xpIntoLevel = totalXp - currentLevelXp;
   const quizCount = analytics?.quizzes ?? player.quizzes;
   const accuracy = analytics?.accuracy ?? player.accuracy;
 
@@ -69,13 +75,13 @@ export default function ProfileScreen() {
         <View style={{ width: '100%', gap: 6 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text size={13} weight="medium" color={colors.textMuted}>
-              {formatNumber(totalXp)} / {formatNumber(nextLevelXp)} XP
+              {formatNumber(xpIntoLevel)} / {formatNumber(nextLevelXp - currentLevelXp)} XP to next level
             </Text>
             <Text size={13} weight="semibold" color={colors.primary}>
               Level {level + 1}
             </Text>
           </View>
-          <ProgressBar progress={totalXp / nextLevelXp} />
+          <ProgressBar progress={Math.min(1, Math.max(0, xpIntoLevel / (nextLevelXp - currentLevelXp)))} />
         </View>
       </View>
 
@@ -109,16 +115,61 @@ export default function ProfileScreen() {
               <ProgressBar progress={item.accuracy / 100} />
             </View>
           ))}
+
+          {analytics.difficultyStats && (
+            <View style={{ gap: 8, paddingTop: 8 }}>
+              <Text size={13} weight="semibold">Accuracy by difficulty</Text>
+              {analytics.difficultyStats.filter((item) => item.total > 0).map((item) => (
+                <View key={item.difficulty} style={{ gap: 5 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text size={13}>{item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1)}</Text>
+                    <Text size={13} weight="semibold">{item.accuracy}% · {item.correct}/{item.total}</Text>
+                  </View>
+                  <ProgressBar progress={item.accuracy / 100} />
+                </View>
+              ))}
+            </View>
+          )}
         </Card>
       )}
 
-      <SectionHeader title="Achievements" />
+      {analytics?.activity && (
+        <Card radius={16} style={{ padding: 16, gap: 12 }}>
+          <View style={{ gap: 3 }}>
+            <Text size={16} weight="semibold">Progression récente</Text>
+            <Text size={12} color={colors.textMuted}>Jours UTC · données calculées sur tes parties terminées</Text>
+          </View>
+          {[{ label: "7 derniers jours", days: analytics.activity.slice(-7) }, { label: "30 derniers jours", days: analytics.activity }].map(({ label, days }) => {
+            const totals = days.reduce((sum, day) => ({
+              quizzes: sum.quizzes + day.quizzes,
+              correct: sum.correct + day.correct,
+              total: sum.total + day.total,
+              xp: sum.xp + day.xp,
+            }), { quizzes: 0, correct: 0, total: 0, xp: 0 });
+            const periodAccuracy = totals.total ? Math.round(totals.correct / totals.total * 100) : 0;
+            return (
+              <View key={label} style={{ gap: 5 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text size={13}>{label}</Text>
+                  <Text size={13} weight="semibold">{totals.quizzes} quiz · {periodAccuracy}%</Text>
+                </View>
+                <ProgressBar progress={periodAccuracy / 100} />
+                <Text size={12} color={colors.textMuted}>{totals.correct}/{totals.total} bonnes réponses · +{totals.xp} XP</Text>
+              </View>
+            );
+          })}
+        </Card>
+      )}
+
+            <SectionHeader title="Achievements" />
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
         {achievements.map((a) => (
           <AchievementBadge key={a.id} item={a} />
         ))}
       </View>
+
+      <Button label="Bibliothèque de questions" variant="secondary" onPress={() => router.push("/library")} />
 
       <SectionHeader title="Recent quizzes" />
       {player.stats.records.length === 0 ? (

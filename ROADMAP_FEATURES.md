@@ -10,8 +10,8 @@
 
 - [x] Créer et conserver cette checklist versionnée (commit de suivi sur la branche de travail).
 - [ ] Examiner l'état Git local et les fichiers de sauvegarde sans les supprimer.
-- [ ] Établir les tests de référence : TypeScript frontend/backend, démarrage Expo, démarrage API, parcours quiz complet.
-- [ ] Vérifier les dépendances déjà installées avant d'en ajouter.
+- [~] Baseline CI : tests unitaires backend, build TypeScript backend et typecheck frontend réussissent; expo-doctor échoue sur des patchs Expo en retard; démarrage Expo/API et parcours complet sur Android encore à valider.
+- [~] Vérifier les dépendances : aucune nouvelle dépendance ajoutée dans les lots actuels; expo-doctor signale trois patchs Expo en retard dans la branche distante.
 - [ ] Vérifier le branchement Frontend ↔ Backend et les variables d'environnement.
 - [ ] Après chaque lot, mettre à jour cette checklist avec les fichiers modifiés et les tests.
 
@@ -19,15 +19,15 @@
 
 ### A. Modes de jeu
 - [ ] Classic : paramètres, nombre de questions, score et écran de résultats cohérents.
-- [ ] 60s Rush : chronomètre global réel de 60 secondes et arrêt fiable.
-- [ ] Survie : fin après 3 mauvaises réponses, sans dépasser cette limite.
-- [ ] Progressif : difficulté réellement progressive et XP cohérents avec la difficulté servie.
-- [ ] Chrono par question : 15 s, 30 s, 45 s et sans limite.
-- [ ] Une seule soumission acceptée par question, y compris après timeout/navigation.
+- [~] 60s Rush : règles serveur de fin et limite temporelle isolées/testées; parcours Android réel à valider.
+- [~] Survie : fin après 3 mauvaises réponses couverte par un test de règle; parcours complet à valider.
+- [~] Progressif : vérification des paliers de difficulté ajoutée; XP et parcours complet à valider.
+- [~] Chrono par question : échéance serveur stricte et testée à la limite exacte; vérifier les quatre choix dans l'app.
+- [~] Une seule soumission acceptée par question, y compris après timeout/navigation (index courant validé côté serveur; réponse vide avant l'échéance désormais refusée; test d'intégration encore requis).
 - [ ] Résultats calculés depuis les réponses réellement validées par le serveur.
 - [ ] État de quiz nettoyé correctement entre deux parties.
 - [ ] Gérer les réponses API vides, erreurs réseau, timeouts et abandon/reprise.
-- [ ] Tests de régression pour chaque mode.
+- [~] Tests unitaires des règles de fin et des échéances ajoutés; tests d'intégration pour chaque mode encore à faire.
 
 ### B. Animation et feedback transversal
 - [ ] Auditer Reanimated et la configuration existante avant d'ajouter des dépendances.
@@ -50,9 +50,9 @@
 - [ ] Explication après réponse uniquement lorsqu'une explication fiable existe.
 - [ ] Ne jamais inventer une explication si la source n'en fournit pas.
 - [ ] Catégories et sous-catégories : données, navigation, filtres et états vides cohérents.
-- [ ] Favoris de questions persistants après fermeture de l'application.
-- [ ] Historique des questions vues.
-- [ ] Liste de questions incorrectes à réviser.
+- [~] Favoris de questions persistants après fermeture de l'application (stockage local et commande dans l'écran de correction ajoutés; tests Android à faire).
+- [~] Historique des questions vues (enregistrement local à l'ouverture de la correction; tests Android à faire).
+- [~] Liste de questions incorrectes à réviser (bibliothèque locale ajoutée; tests Android à faire).
 - [ ] Rejouer une session de révision sans fausser les statistiques/XP du classement.
 - [ ] Statistiques de précision par catégorie et difficulté.
 - [ ] Réduire les répétitions récentes et diversifier les questions.
@@ -64,10 +64,10 @@
 ## Priorité 1 — Progression, fidélisation et récompenses
 
 - [ ] Vérifier la persistance réelle de l'XP et corriger les divergences frontend/backend.
-- [ ] Vérifier le calcul du niveau et la progression vers le prochain niveau.
+- [~] Vérifier le calcul du niveau et la progression vers le prochain niveau (barre et XP requis du niveau courant corrigés; validation Android à faire).
 - [ ] Garantir qu'une même partie ne donne pas ses récompenses deux fois.
 - [ ] Séries quotidiennes : fuseau/date, jour manqué, retour après minuit et cas limites.
-- [ ] Défi quotidien : même défi stable pour une date et règles anti-duplication.
+- [~] Défi quotidien : les questions sont maintenant conservées dans le stockage persistant par date; anti-duplication encore basée sur le pseudo et tests de redémarrage à faire.
 - [ ] Quêtes quotidiennes avec progression et critères explicites.
 - [ ] Quêtes hebdomadaires avec progression et expiration explicite.
 - [ ] Déblocage de succès/badges sur des critères vérifiables.
@@ -82,10 +82,10 @@
 ## Priorité 1 — Profil, statistiques et personnalisation
 
 - [ ] Précision globale et nombre de questions répondues.
-- [ ] Précision par catégorie et difficulté.
+- [~] Précision par catégorie et difficulté (précision par catégorie déjà disponible; détail par difficulté ajouté, à valider avec des parties réelles).
 - [ ] Meilleur score et meilleure série de bonnes réponses.
 - [ ] Temps moyen de réponse, si la donnée est collectée de façon fiable.
-- [ ] Progression sur 7 jours et 30 jours.
+- [~] Progression sur 7 jours et 30 jours (agrégats UTC et affichage profil ajoutés; tests Android à faire).
 - [ ] Catégories favorites et recommandations basées sur les performances réelles.
 - [ ] Préférences de thème clair/sombre si prises en charge par le design actuel.
 - [ ] Préférences de langue, sons et vibrations.
@@ -120,7 +120,7 @@
 - [ ] Ajouter authentification et sessions sécurisées avant la synchronisation multi-appareils.
 - [ ] Préserver/migrer les données locales existantes quand un compte est créé.
 - [ ] Valider côté serveur les réponses, scores, XP, succès et quêtes.
-- [ ] Limiter les requêtes et prévenir les soumissions répétées/abusives.
+- [~] Limiter les requêtes et prévenir les soumissions répétées/abusives (limiteur en mémoire par IP ajouté; persistance multi-instance et tests de charge encore requis).
 - [ ] Validation des entrées, erreurs API cohérentes et logs utiles sans secrets.
 - [ ] Définir politique de suppression/export des données de compte.
 - [ ] Vérifier les variables d'environnement et ne jamais committer de secrets.
@@ -170,6 +170,17 @@
 | 2026-10-19 | Création de la roadmap | `ROADMAP_FEATURES.md` | À lancer sur l'environnement local | Checklist créée; aucune fonctionnalité n'est déclarée terminée sans test |
 | 2026-10-19 | Premier lot d'animations quiz | `Frontend/src/components/ui/OptionCard.tsx`, `Frontend/src/components/ui/ProgressBar.tsx`, `Frontend/src/components/features/FeedbackSheet.tsx` | Non exécutés : les changements ont été appliqués au dépôt distant et doivent être récupérés puis testés dans l'environnement local | Animations de rebond/entrée, progression et panneau de feedback ajoutées; validation TypeScript/Expo requise |
 | 2026-10-19 | Animation de la correction | `Frontend/src/app/(quiz)/review.tsx` | Non exécutés : compilation et test manuel requis | Le mode de correction existant est conservé; cartes et choix apparaissent progressivement, avec prise en compte de la réduction des animations. État vide/erreur et bouton de nouvelle tentative ajoutés. |
+| 2026-10-23 | Lot 0 — icône de correction | `Frontend/src/app/(quiz)/review.tsx` | Non exécutés dans cet environnement | Remplacement de `book-open` par le nom d'icône enregistré `book`; vérifier TypeScript sur l'environnement local. |
+| 2026-10-23 | Lot 1 — lots de questions et mode progressif | `Backend/src/services/question-batch.ts`, `Backend/src/services/questions.service.ts`, `Backend/src/routes/quiz.routes.ts`, `Backend/test/question-batch.test.ts`, `Backend/package.json` | CI : tests backend et build TypeScript réussis; tests de fournisseur en conditions réelles encore requis | Les réponses partielles d'Open Trivia DB sont traitées comme un échec de fournisseur afin d'activer les fallbacks. Le mode progressif refuse une difficulté qui ne correspond pas au palier demandé. Validation en conditions réelles encore requise. |
+| 2026-10-23 | Lot 2 — bibliothèque locale de questions | `Frontend/src/lib/question-library.ts`, `Frontend/src/app/(quiz)/review.tsx`, `Frontend/src/app/library.tsx`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; TypeScript frontend et test Android requis | Ajout du stockage local des favoris, de l'historique des questions vues et des questions incorrectes, avec un écran Bibliothèque accessible depuis le profil. Fonctionnalité en cours jusqu'à validation sur Android. |
+| 2026-10-23 | Lot 3 — statistiques par difficulté | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Les nouveaux résultats enregistrent les totaux/corrections par difficulté et le profil affiche l'exactitude facile/moyen/difficile. Les anciennes parties sans détail restent compatibles mais n'alimentent pas rétroactivement ces statistiques. |
+| 2026-10-23 | Lot 4 — progression sur 7/30 jours | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/lib/api.ts`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; CI à vérifier | Ajout d'une série quotidienne UTC sur 30 jours et de résumés 7/30 jours au profil (quiz, précision, réponses correctes, XP). Validation visuelle Android requise. |
+| 2026-10-23 | Lot 5 — règles de fin et échéances | `Backend/src/services/quiz-rules.ts`, `Backend/src/routes/quiz.routes.ts`, `Backend/test/question-batch.test.ts` | CI : tests unitaires et build backend réussis; parcours Android à tester | Les conditions de fin sont centralisées; le serveur considère une échéance atteinte à l'instant exact de sa limite. Les tests d'intégration du parcours complet restent à faire. |
+| 2026-10-23 | Lot 6 — progression XP | `Frontend/src/hooks/usePlayer.ts`, `Frontend/src/app/(tabs)/profile.tsx` | TypeScript frontend à vérifier; test visuel Android requis | La barre d'XP affiche maintenant la progression à l'intérieur du niveau courant au lieu de diviser l'XP totale par le seuil du prochain niveau. |
+| 2026-10-23 | Lot 7 — persistance du défi quotidien | `Backend/src/services/persistence.service.ts`, `Backend/src/routes/quiz.routes.ts` | Build backend et test de redémarrage requis | Le cache de questions quotidiennes est sauvegardé avec l'état JSON existant, pour garder les mêmes questions après redémarrage d'une instance disposant du même fichier persistant. La synchronisation entre plusieurs instances n'est pas résolue. |
+| 2026-10-23 | Lot 8 — limitation des requêtes | `Backend/src/services/rate-limit.ts`, `Backend/src/server.ts`, `Backend/test/question-batch.test.ts` | CI : tests unitaires et build backend réussis | Ajout d'un limiteur par fenêtre d'une minute, avec limites distinctes pour création de quiz, soumissions de réponses et requêtes générales. Le limiteur est par processus et ne remplace pas une limitation partagée en production. |
+| 2026-10-23 | Lot 9 — refus des réponses vides anticipées | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/app/(quiz)/play.tsx` | Build/typecheck CI à vérifier; parcours chrono à tester sur Android | Le serveur n'accepte plus un saut de question par envoi d'une réponse vide avant l'échéance. Le client réessaie brièvement si le timer local arrive quelques millisecondes avant celui du serveur. |
+| 2026-10-23 | Lot 10 — fraîcheur du profil et provenance | `Frontend/src/app/(tabs)/profile.tsx`, `Frontend/src/app/(quiz)/play.tsx` | TypeScript CI à vérifier; validation visuelle Android requise | Le profil recharge ses statistiques à chaque retour sur l'onglet; la source de la question reste visible aussi en production lorsque l'API fournit cette information. |
 
 ## Règles de mise à jour
 

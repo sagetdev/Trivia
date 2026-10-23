@@ -1,6 +1,7 @@
 import * as opentdb from "./opentdb.service";
 import * as triviaapi from "./triviaapi.service";
 import type { Difficulty, QuestionType, QuizQuestion } from "./opentdb.service";
+import { requireQuestionCount } from "./question-batch";
 
 /**
  * OpenTDB remains the canonical category catalogue. Only categories with a
@@ -72,16 +73,19 @@ async function getOpenTdbQuestions(
   options: { categoryId?: number; difficulty?: Difficulty; type?: QuestionType },
   includeTrueFalse: boolean,
 ): Promise<QuizQuestion[]> {
+  const checked = async (pending: Promise<QuizQuestion[]>) =>
+    requireQuestionCount(await pending, amount, "Open Trivia DB");
+
   try {
-    return await getOpenTdbQuestionsStrict(amount, options, includeTrueFalse);
+    return await checked(getOpenTdbQuestionsStrict(amount, options, includeTrueFalse));
   } catch (firstError) {
     if (options.difficulty) {
       try {
-        return await getOpenTdbQuestionsStrict(
+        return await checked(getOpenTdbQuestionsStrict(
           amount,
           { ...options, difficulty: undefined },
           includeTrueFalse,
-        );
+        ));
       } catch {
         // Continue to the category fallback below.
       }
@@ -91,11 +95,11 @@ async function getOpenTdbQuestions(
     // the available question types rather than failing the whole quiz.
     if (includeTrueFalse) {
       try {
-        return await opentdb.getQuestions({
+        return await checked(opentdb.getQuestions({
           ...options,
           amount,
           difficulty: undefined,
-        });
+        }));
       } catch {
         // Continue to the mixed-category fallback below.
       }
@@ -104,16 +108,16 @@ async function getOpenTdbQuestions(
     if (options.categoryId !== undefined) {
       try {
         if (includeTrueFalse) {
-          return await opentdb.getQuestions({
+          return await checked(opentdb.getQuestions({
             amount,
             type: options.type,
-          });
+          }));
         }
-        return await getOpenTdbQuestionsStrict(
+        return await checked(getOpenTdbQuestionsStrict(
           amount,
           { ...options, categoryId: undefined, difficulty: undefined },
           includeTrueFalse,
-        );
+        ));
       } catch {
         // Keep the original error when every fallback fails.
       }
