@@ -304,7 +304,10 @@ router.post("/quizzes/:id/answers", async (req, res) => {
   const questionTimedOut = session.timePerQuestion !== null &&
     hasDeadlinePassed(session.questionStartedAt + session.timePerQuestion * 1000, answerReceivedAt);
   const timedOut = overallTimedOut || questionTimedOut;
-  if (!timedOut && answer !== "" && !question.answers.includes(answer)) {
+  if (!timedOut && answer === "") {
+    res.status(409).json({ error: "Le chrono n'est pas encore écoulé." }); return;
+  }
+  if (!timedOut && !question.answers.includes(answer)) {
     res.status(400).json({ error: "La réponse ne fait pas partie des choix proposés." }); return;
   }
 
