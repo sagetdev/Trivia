@@ -109,6 +109,21 @@ export default function ProfileScreen() {
               <ProgressBar progress={item.accuracy / 100} />
             </View>
           ))}
+
+          {analytics.difficultyStats && (
+            <View style={{ gap: 8, paddingTop: 8 }}>
+              <Text size={13} weight="semibold">Accuracy by difficulty</Text>
+              {analytics.difficultyStats.filter((item) => item.total > 0).map((item) => (
+                <View key={item.difficulty} style={{ gap: 5 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                    <Text size={13}>{item.difficulty.charAt(0).toUpperCase() + item.difficulty.slice(1)}</Text>
+                    <Text size={13} weight="semibold">{item.accuracy}% · {item.correct}/{item.total}</Text>
+                  </View>
+                  <ProgressBar progress={item.accuracy / 100} />
+                </View>
+              ))}
+            </View>
+          )}
         </Card>
       )}
 
