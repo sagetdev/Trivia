@@ -93,6 +93,13 @@ export default function QuizPlayScreen() {
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Erreur inconnue';
 
+        // Client and server timers can differ by a few milliseconds. Retry a
+        // timeout once the server confirms that its deadline has elapsed.
+        if (isTimeout && message.includes("Le chrono n'est pas encore écoulé")) {
+          setTimeout(() => { void send('', true); }, 100);
+          return;
+        }
+
         // A timeout and a tap can race, or a previous request can finish on the
         // server before this screen receives its response. Recover from that
         // specific conflict by synchronizing with the authoritative session.
