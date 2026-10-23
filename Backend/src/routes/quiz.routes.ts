@@ -10,6 +10,7 @@ import {
 } from "../services/questions.service";
 import { readPersistentState, writePersistentState } from "../services/persistence.service";
 import { requireDifficultyBatch, requireQuestionCount } from "../services/question-batch";
+import { hasDeadlinePassed, shouldFinishQuiz } from "../services/quiz-rules";
 
 const router = Router();
 
@@ -292,9 +293,11 @@ router.post("/quizzes/:id/answers", async (req, res) => {
     res.status(409).json({ error: "Aucune question disponible." }); return;
   }
 
-  const overallTimedOut = session.overallDeadlineAt !== null && Date.now() > session.overallDeadlineAt;
-  const timedOut = overallTimedOut || (session.timePerQuestion !== null &&
-    Date.now() - session.questionStartedAt > session.timePerQuestion * 1000);
+  const answerReceivedAt = Date.now();
+  const overallTimedOut = hasDeadlinePassed(session.overallDeadlineAt, answerReceivedAt);
+  const questionTimedOut = session.timePerQuestion !== null &&
+    hasDeadlinePassed(session.questionStartedAt + session.timePerQuestion * 1000, answerReceivedAt);
+  const timedOut = overallTimedOut || questionTimedOut;
   if (!timedOut && answer !== "" && !question.answers.includes(answer)) {
     res.status(400).json({ error: "La réponse ne fait pas partie des choix proposés." }); return;
   }
@@ -315,7 +318,13 @@ router.post("/quizzes/:id/answers", async (req, res) => {
   else session.mistakes += 1;
 
   session.currentIndex += 1;
-  const finished = session.currentIndex >= session.questions.length || (session.gameMode === "survival" && session.mistakes >= 3) || overallTimedOut;
+  const finished = shouldFinishQuiz({
+    currentIndex: session.currentIndex,
+    totalQuestions: session.questions.length,
+    gameMode: session.gameMode,
+    mistakes: session.mistakes,
+    overallTimedOut,
+  });
   const now = Date.now();
   if (finished) {
     session.finishedAt = new Date(now).toISOString();
