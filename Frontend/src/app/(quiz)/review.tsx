@@ -77,7 +77,7 @@ export default function QuizReviewScreen() {
         {!loading && !error && answers.length === 0 && (
           <Animated.View entering={reduceMotion ? undefined : FadeInDown.duration(220)}>
             <Card radius={18} style={{ padding: 20, alignItems: 'center', gap: 10 }}>
-              <Icon name="book-open" size={28} color={colors.textMuted} />
+              <Icon name="book" size={28} color={colors.textMuted} />
               <Text size={17} weight="semibold">Aucune réponse à afficher</Text>
               <Text size={13} color={colors.textMuted} align="center">La correction de cette partie ne contient pas encore de réponse enregistrée.</Text>
             </Card>
