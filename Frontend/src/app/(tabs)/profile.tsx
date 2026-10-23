@@ -31,7 +31,9 @@ export default function ProfileScreen() {
   const saveName = async () => { await setPlayerName(draft); await player.refresh(); setEditing(false); };
   const totalXp = analytics?.xp ?? player.xp;
   const level = Math.floor(totalXp / 100) + 1;
+  const currentLevelXp = (level - 1) * 100;
   const nextLevelXp = level * 100;
+  const xpIntoLevel = totalXp - currentLevelXp;
   const quizCount = analytics?.quizzes ?? player.quizzes;
   const accuracy = analytics?.accuracy ?? player.accuracy;
 
@@ -69,13 +71,13 @@ export default function ProfileScreen() {
         <View style={{ width: '100%', gap: 6 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text size={13} weight="medium" color={colors.textMuted}>
-              {formatNumber(totalXp)} / {formatNumber(nextLevelXp)} XP
+              {formatNumber(xpIntoLevel)} / {formatNumber(nextLevelXp - currentLevelXp)} XP to next level
             </Text>
             <Text size={13} weight="semibold" color={colors.primary}>
               Level {level + 1}
             </Text>
           </View>
-          <ProgressBar progress={totalXp / nextLevelXp} />
+          <ProgressBar progress={Math.min(1, Math.max(0, xpIntoLevel / (nextLevelXp - currentLevelXp)))} />
         </View>
       </View>
 
