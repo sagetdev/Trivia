@@ -127,7 +127,35 @@ export default function ProfileScreen() {
         </Card>
       )}
 
-      <SectionHeader title="Achievements" />
+      {analytics?.activity && (
+        <Card radius={16} style={{ padding: 16, gap: 12 }}>
+          <View style={{ gap: 3 }}>
+            <Text size={16} weight="semibold">Progression récente</Text>
+            <Text size={12} color={colors.textMuted}>Jours UTC · données calculées sur tes parties terminées</Text>
+          </View>
+          {[{ label: "7 derniers jours", days: analytics.activity.slice(-7) }, { label: "30 derniers jours", days: analytics.activity }].map(({ label, days }) => {
+            const totals = days.reduce((sum, day) => ({
+              quizzes: sum.quizzes + day.quizzes,
+              correct: sum.correct + day.correct,
+              total: sum.total + day.total,
+              xp: sum.xp + day.xp,
+            }), { quizzes: 0, correct: 0, total: 0, xp: 0 });
+            const periodAccuracy = totals.total ? Math.round(totals.correct / totals.total * 100) : 0;
+            return (
+              <View key={label} style={{ gap: 5 }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text size={13}>{label}</Text>
+                  <Text size={13} weight="semibold">{totals.quizzes} quiz · {periodAccuracy}%</Text>
+                </View>
+                <ProgressBar progress={periodAccuracy / 100} />
+                <Text size={12} color={colors.textMuted}>{totals.correct}/{totals.total} bonnes réponses · +{totals.xp} XP</Text>
+              </View>
+            );
+          })}
+        </Card>
+      )}
+
+            <SectionHeader title="Achievements" />
 
       <View style={{ flexDirection: 'row', gap: 12 }}>
         {achievements.map((a) => (
