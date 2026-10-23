@@ -22,9 +22,9 @@ const times = [
 ];
 
 const modes: { id: GameMode; title: string; subtitle: string; icon: string }[] = [
-  { id: 'classic', title: 'Classic', subtitle: 'Play at your pace', icon: 'layers' },
-  { id: 'timed', title: 'Time attack', subtitle: 'Quick decisions', icon: 'timer' },
-  { id: 'daily', title: 'Daily challenge', subtitle: 'A fresh challenge', icon: 'calendar-check' },
+  { id: 'classic', title: 'Classic', subtitle: 'Play at your pace', icon: 'book' },
+  { id: 'timed', title: 'Time attack', subtitle: 'Quick decisions', icon: 'clock' },
+  { id: 'daily', title: 'Daily challenge', subtitle: 'A fresh challenge', icon: 'star' },
 ];
 
 function SectionTitle({ children, trailing }: { children: React.ReactNode; trailing?: string }) {
@@ -106,7 +106,7 @@ export default function QuizSetupScreen() {
               <RNText className="mt-1 text-xl font-bold text-ink">{category.name}</RNText>
               <RNText className="mt-1 text-sm text-muted">Questions from the active provider</RNText>
             </View>
-            <Icon name="check-circle-2" size={22} color={colors.primary} />
+            <Icon name="check" size={22} color={colors.primary} />
           </View>
         </View>
 
@@ -169,7 +169,7 @@ export default function QuizSetupScreen() {
         <View className="mb-6 flex-row gap-3">
           <View className="flex-1 rounded-2xl border border-line bg-white p-4">
             <View className="mb-2 flex-row items-center">
-              <Icon name="clock-3" size={17} color={colors.textMuted} />
+              <Icon name="clock" size={17} color={colors.textMuted} />
               <RNText className="ml-2 text-xs font-medium text-muted">Estimated time</RNText>
             </View>
             <RNText className="text-xl font-bold text-ink">~{mode === 'daily' ? Math.max(1, Math.round((10 * estimatedSeconds) / 60)) : minutes} min</RNText>
