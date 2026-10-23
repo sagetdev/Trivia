@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { colors } from '../../theme';
 import type { Achievement } from '../../components/data/mock';
 import { usePlayer } from '../../hooks/usePlayer';
@@ -27,7 +27,11 @@ export default function ProfileScreen() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [analytics, setAnalytics] = useState<PlayerAnalytics | null>(null);
-  useEffect(() => { api.getStats(player.name).then(setAnalytics).catch(() => setAnalytics(null)); }, [player.name]);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    api.getStats(player.name).then((value) => { if (active) setAnalytics(value); }).catch(() => { if (active) setAnalytics(null); });
+    return () => { active = false; };
+  }, [player.name]));
   const saveName = async () => { await setPlayerName(draft); await player.refresh(); setEditing(false); };
   const totalXp = analytics?.xp ?? player.xp;
   const level = Math.floor(totalXp / 100) + 1;
