@@ -23,7 +23,7 @@
 - [~] Survie : fin après 3 mauvaises réponses couverte par un test de règle; parcours complet à valider.
 - [~] Progressif : vérification des paliers de difficulté ajoutée; XP et parcours complet à valider.
 - [~] Chrono par question : échéance serveur stricte et testée à la limite exacte; vérifier les quatre choix dans l'app.
-- [ ] Une seule soumission acceptée par question, y compris après timeout/navigation.
+- [~] Une seule soumission acceptée par question, y compris après timeout/navigation (index courant validé côté serveur; réponse vide avant l'échéance désormais refusée; test d'intégration encore requis).
 - [ ] Résultats calculés depuis les réponses réellement validées par le serveur.
 - [ ] État de quiz nettoyé correctement entre deux parties.
 - [ ] Gérer les réponses API vides, erreurs réseau, timeouts et abandon/reprise.
@@ -179,6 +179,7 @@
 | 2026-10-23 | Lot 6 — progression XP | `Frontend/src/hooks/usePlayer.ts`, `Frontend/src/app/(tabs)/profile.tsx` | TypeScript frontend à vérifier; test visuel Android requis | La barre d'XP affiche maintenant la progression à l'intérieur du niveau courant au lieu de diviser l'XP totale par le seuil du prochain niveau. |
 | 2026-10-23 | Lot 7 — persistance du défi quotidien | `Backend/src/services/persistence.service.ts`, `Backend/src/routes/quiz.routes.ts` | Build backend et test de redémarrage requis | Le cache de questions quotidiennes est sauvegardé avec l'état JSON existant, pour garder les mêmes questions après redémarrage d'une instance disposant du même fichier persistant. La synchronisation entre plusieurs instances n'est pas résolue. |
 | 2026-10-23 | Lot 8 — limitation des requêtes | `Backend/src/services/rate-limit.ts`, `Backend/src/server.ts`, `Backend/test/question-batch.test.ts` | Tests unitaires ajoutés; CI à vérifier | Ajout d'un limiteur par fenêtre d'une minute, avec limites distinctes pour création de quiz, soumissions de réponses et requêtes générales. Le limiteur est par processus et ne remplace pas une limitation partagée en production. |
+| 2026-10-23 | Lot 9 — refus des réponses vides anticipées | `Backend/src/routes/quiz.routes.ts`, `Frontend/src/app/(quiz)/play.tsx` | Build/typecheck CI à vérifier; parcours chrono à tester sur Android | Le serveur n'accepte plus un saut de question par envoi d'une réponse vide avant l'échéance. Le client réessaie brièvement si le timer local arrive quelques millisecondes avant celui du serveur. |
 
 ## Règles de mise à jour
 
