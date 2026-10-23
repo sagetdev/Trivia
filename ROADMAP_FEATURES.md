@@ -120,7 +120,7 @@
 - [ ] Ajouter authentification et sessions sécurisées avant la synchronisation multi-appareils.
 - [ ] Préserver/migrer les données locales existantes quand un compte est créé.
 - [ ] Valider côté serveur les réponses, scores, XP, succès et quêtes.
-- [ ] Limiter les requêtes et prévenir les soumissions répétées/abusives.
+- [~] Limiter les requêtes et prévenir les soumissions répétées/abusives (limiteur en mémoire par IP ajouté; persistance multi-instance et tests de charge encore requis).
 - [ ] Validation des entrées, erreurs API cohérentes et logs utiles sans secrets.
 - [ ] Définir politique de suppression/export des données de compte.
 - [ ] Vérifier les variables d'environnement et ne jamais committer de secrets.
@@ -178,6 +178,7 @@
 | 2026-10-23 | Lot 5 — règles de fin et échéances | `Backend/src/services/quiz-rules.ts`, `Backend/src/routes/quiz.routes.ts`, `Backend/test/question-batch.test.ts` | Tests unitaires ajoutés; CI à vérifier | Les conditions de fin sont centralisées; le serveur considère une échéance atteinte à l'instant exact de sa limite. Les tests d'intégration du parcours complet restent à faire. |
 | 2026-10-23 | Lot 6 — progression XP | `Frontend/src/hooks/usePlayer.ts`, `Frontend/src/app/(tabs)/profile.tsx` | TypeScript frontend à vérifier; test visuel Android requis | La barre d'XP affiche maintenant la progression à l'intérieur du niveau courant au lieu de diviser l'XP totale par le seuil du prochain niveau. |
 | 2026-10-23 | Lot 7 — persistance du défi quotidien | `Backend/src/services/persistence.service.ts`, `Backend/src/routes/quiz.routes.ts` | Build backend et test de redémarrage requis | Le cache de questions quotidiennes est sauvegardé avec l'état JSON existant, pour garder les mêmes questions après redémarrage d'une instance disposant du même fichier persistant. La synchronisation entre plusieurs instances n'est pas résolue. |
+| 2026-10-23 | Lot 8 — limitation des requêtes | `Backend/src/services/rate-limit.ts`, `Backend/src/server.ts`, `Backend/test/question-batch.test.ts` | Tests unitaires ajoutés; CI à vérifier | Ajout d'un limiteur par fenêtre d'une minute, avec limites distinctes pour création de quiz, soumissions de réponses et requêtes générales. Le limiteur est par processus et ne remplace pas une limitation partagée en production. |
 
 ## Règles de mise à jour
 
