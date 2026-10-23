@@ -50,9 +50,9 @@
 - [ ] Explication après réponse uniquement lorsqu'une explication fiable existe.
 - [ ] Ne jamais inventer une explication si la source n'en fournit pas.
 - [ ] Catégories et sous-catégories : données, navigation, filtres et états vides cohérents.
-- [ ] Favoris de questions persistants après fermeture de l'application.
-- [ ] Historique des questions vues.
-- [ ] Liste de questions incorrectes à réviser.
+- [~] Favoris de questions persistants après fermeture de l'application (stockage local et commande dans l'écran de correction ajoutés; tests Android à faire).
+- [~] Historique des questions vues (enregistrement local à l'ouverture de la correction; tests Android à faire).
+- [~] Liste de questions incorrectes à réviser (bibliothèque locale ajoutée; tests Android à faire).
 - [ ] Rejouer une session de révision sans fausser les statistiques/XP du classement.
 - [ ] Statistiques de précision par catégorie et difficulté.
 - [ ] Réduire les répétitions récentes et diversifier les questions.
@@ -172,6 +172,7 @@
 | 2026-10-19 | Animation de la correction | `Frontend/src/app/(quiz)/review.tsx` | Non exécutés : compilation et test manuel requis | Le mode de correction existant est conservé; cartes et choix apparaissent progressivement, avec prise en compte de la réduction des animations. État vide/erreur et bouton de nouvelle tentative ajoutés. |
 | 2026-10-23 | Lot 0 — icône de correction | `Frontend/src/app/(quiz)/review.tsx` | Non exécutés dans cet environnement | Remplacement de `book-open` par le nom d'icône enregistré `book`; vérifier TypeScript sur l'environnement local. |
 | 2026-10-23 | Lot 1 — lots de questions et mode progressif | `Backend/src/services/question-batch.ts`, `Backend/src/services/questions.service.ts`, `Backend/src/routes/quiz.routes.ts`, `Backend/test/question-batch.test.ts`, `Backend/package.json` | Tests ajoutés mais non exécutés ici; build TypeScript à lancer localement | Les réponses partielles d'Open Trivia DB sont désormais traitées comme un échec de fournisseur afin d'activer les fallbacks. Le mode progressif refuse une difficulté renvoyée qui ne correspond pas au palier demandé. Le statut des fonctionnalités reste à valider avec les tests locaux. |
+| 2026-10-23 | Lot 2 — bibliothèque locale de questions | `Frontend/src/lib/question-library.ts`, `Frontend/src/app/(quiz)/review.tsx`, `Frontend/src/app/library.tsx`, `Frontend/src/app/(tabs)/profile.tsx` | Non exécutés ici; TypeScript frontend et test Android requis | Ajout du stockage local des favoris, de l'historique des questions vues et des questions incorrectes, avec un écran Bibliothèque accessible depuis le profil. Fonctionnalité en cours jusqu'à validation sur Android. |
 
 ## Règles de mise à jour
 
