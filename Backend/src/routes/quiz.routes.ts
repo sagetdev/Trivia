@@ -70,6 +70,7 @@ async function persist(): Promise<void> {
     sessions: [...sessions.entries()],
     leaderboard: [...leaderboard],
     records: [...completedRecords],
+    dailyQuestions: [...dailyQuestionCache.entries()],
   };
   persistQueue = persistQueue.catch(() => {}).then(() => writePersistentState(snapshot));
   await persistQueue;
@@ -85,6 +86,11 @@ export async function initializeQuizRoutes(): Promise<void> {
     if (entry && typeof entry === "object") completedRecords.push(entry as LeaderboardEntry);
   }
   if (completedRecords.length === 0) completedRecords.push(...saved.leaderboard as LeaderboardEntry[]);
+  for (const [date, questions] of saved.dailyQuestions ?? []) {
+    if (typeof date === "string" && Array.isArray(questions)) {
+      dailyQuestionCache.set(date, questions as QuizQuestion[]);
+    }
+  }
   for (const entry of saved.leaderboard) {
     if (entry && typeof entry === "object") leaderboard.push(entry as LeaderboardEntry);
   }
