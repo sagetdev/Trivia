@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown, FadeInRight, useReducedMotion } from 'react-native-reanimated';
 import { api, type AnswerReview } from '../../lib/api';
+import { getQuestionLibrary, questionKey, recordQuestionReview, toggleQuestionFavorite } from '../../lib/question-library';
 import { colors } from '../../theme';
 import { Button, Card, Icon, IconButton, Text } from '../../components/ui';
 
@@ -13,7 +14,30 @@ export default function QuizReviewScreen() {
   const [answers, setAnswers] = useState<AnswerReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [favoriteError, setFavoriteError] = useState<string | null>(null);
+  const [favoriteKeys, setFavoriteKeys] = useState<string[]>([]);
   const reduceMotion = useReducedMotion();
+
+  const applyReview = useCallback((items: AnswerReview[]) => {
+    setAnswers(items);
+    void recordQuestionReview(items).catch(() => {});
+    void getQuestionLibrary()
+      .then((library) => setFavoriteKeys(library.favorites.map(questionKey)))
+      .catch(() => {});
+  }, []);
+
+  const toggleFavorite = useCallback(async (item: AnswerReview) => {
+    setFavoriteError(null);
+    try {
+      const saved = await toggleQuestionFavorite(item);
+      const key = questionKey(item);
+      setFavoriteKeys((current) => saved
+        ? current.includes(key) ? current : [...current, key]
+        : current.filter((favoriteKey) => favoriteKey !== key));
+    } catch {
+      setFavoriteError("Impossible d'enregistrer ce favori sur l'appareil.");
+    }
+  }, []);
 
   useEffect(() => {
     if (!quizId) {
@@ -24,14 +48,14 @@ export default function QuizReviewScreen() {
 
     let active = true;
     api.getReview(quizId)
-      .then((result) => { if (active) setAnswers(result.answers); })
+      .then((result) => { if (active) applyReview(result.answers); })
       .catch((e) => {
         if (active) setError(e instanceof Error ? e.message : 'Impossible de charger la correction.');
       })
       .finally(() => { if (active) setLoading(false); });
 
     return () => { active = false; };
-  }, [quizId]);
+  }, [quizId, applyReview]);
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -48,6 +72,8 @@ export default function QuizReviewScreen() {
             </Text>
           </View>
         </Animated.View>
+
+        {favoriteError && <Text size={12} color={colors.error}>{favoriteError}</Text>}
 
         {loading && (
           <Animated.View entering={reduceMotion ? undefined : FadeInDown.duration(180)} style={{ padding: 24, alignItems: 'center', gap: 10 }}>
@@ -66,7 +92,7 @@ export default function QuizReviewScreen() {
                 setError(null);
                 setLoading(true);
                 api.getReview(quizId)
-                  .then((result) => setAnswers(result.answers))
+                  .then((result) => applyReview(result.answers))
                   .catch((e) => setError(e instanceof Error ? e.message : 'Impossible de charger la correction.'))
                   .finally(() => setLoading(false));
               }} variant="secondary" />
@@ -133,6 +159,12 @@ export default function QuizReviewScreen() {
                   );
                 })}
               </View>
+
+              <Button
+                label={favoriteKeys.includes(questionKey(item)) ? "Retirer des favoris" : "Ajouter aux favoris"}
+                variant="secondary"
+                onPress={() => { void toggleFavorite(item); }}
+              />
 
               {item.timedOut && <Text size={12} color={colors.warning}>Le temps est écoulé pour cette question.</Text>}
 
