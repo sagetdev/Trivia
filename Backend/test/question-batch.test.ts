@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { requireDifficultyBatch, requireQuestionCount } from "../src/services/question-batch";
 import { hasDeadlinePassed, shouldFinishQuiz } from "../src/services/quiz-rules";
+import { InMemoryRateLimiter } from "../src/services/rate-limit";
 
 test("returns an empty batch when zero questions are requested", () => {
   assert.deepEqual(requireQuestionCount(["a"], 0, "provider"), []);
@@ -72,4 +73,21 @@ test("finishes a quiz at the question limit or global deadline", () => {
     mistakes: 0,
     overallTimedOut: true,
   }), true);
+});
+
+test("rate limiter allows only the configured count per window", () => {
+  const limiter = new InMemoryRateLimiter();
+  assert.deepEqual(limiter.consume("client-a", 2, 60_000, 1_000), {
+    allowed: true,
+    remaining: 1,
+    retryAfterSeconds: 0,
+  });
+  assert.equal(limiter.consume("client-a", 2, 60_000, 2_000).allowed, true);
+  assert.deepEqual(limiter.consume("client-a", 2, 60_000, 3_000), {
+    allowed: false,
+    remaining: 0,
+    retryAfterSeconds: 58,
+  });
+  assert.equal(limiter.consume("client-b", 2, 60_000, 3_000).allowed, true);
+  assert.equal(limiter.consume("client-a", 2, 60_000, 61_000).allowed, true);
 });
